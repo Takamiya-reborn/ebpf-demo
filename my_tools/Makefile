@@ -1,4 +1,3 @@
-# ========== 独立版Makefile，不需要依赖顶层scripts，适配CentOS 10 ==========
 LIBBPF_DIR := ../libbpf/src
 
 # 自己定义编译工具链，不用引入外部规则
@@ -12,17 +11,34 @@ CATEGORIES = cpu disk file memo network
 ALL_BPF_SRCS := $(wildcard $(addsuffix /*.bpf.c, $(CATEGORIES)))
 APPS := $(patsubst %.bpf.c, %, $(notdir $(ALL_BPF_SRCS)))
 
+# 各分类工具名
+$(foreach c,$(CATEGORIES),$(eval $c_APPS := $(patsubst %.bpf.c,%, $(notdir $(wildcard $c/*.bpf.c)))))
+
 # 输出目录
 OUTPUT ?= .output
-BIN_DIR ?= bin/
+BIN_DIR ?= bin
 $(shell mkdir -p $(OUTPUT) $(BIN_DIR))
 
 # 编译参数
-INCLUDES := -I$(LIBBPF_DIR) -I$(LIBBPF_DIR)/include/uapi -I$(LIBBPF_DIR)/include -I./common -I$(OUTPUT)
+INCLUDES := -I$(LIBBPF_DIR) -I$(LIBBPF_DIR)/src -I$(LIBBPF_DIR)/include/uapi -I$(LIBBPF_DIR)/include -I./common -I$(OUTPUT)
 CFLAGS += -g -Wall $(INCLUDES)
 LDFLAGS += -L$(LIBBPF_DIR) -lbpf -lelf -lz -pthread
 
+# 默认目标：make 时执行 all
+.DEFAULT_GOAL := all
+
 vpath %.bpf.c $(CATEGORIES)
+vpath %.c $(CATEGORIES)
+
+# 分类构建规则
+define category_rule
+$1: $$($1_APPS)
+endef
+$(foreach c,$(CATEGORIES),$(eval $(call category_rule,$c)))
+
+# 构建二进制文件路径列表，便于 clean
+BINARIES := $(addprefix $(BIN_DIR)/,$(APPS))
+OLD_BINARIES := $(foreach app,$(APPS),$(dir $(firstword $(wildcard */$(app).c)))$(app))
 
 # Get Clang's default includes on this system. We'll explicitly add these dirs
 # to the includes list when compiling with `-target bpf` because otherwise some
@@ -45,29 +61,25 @@ $(LIBBPF_DIR)/staticobjs/libbpf.a:
 
 all: $(LIBBPF_DIR)/staticobjs/libbpf.a $(APPS)
 
-$(CATEGORIES): % : $(patsubst %.bpf.c, %, $(notdir $(wildcard $*/*.bpf.c)))
-	@echo "✅ 分类 $@ 所有工具编译完成"
-
 # ------------------- 编译规则 -------------------
-$(OUTPUT)/irq_stat.bpf.o: cpu/irq_stat.bpf.c common/vmlinux.h | $(OUTPUT)
+$(OUTPUT)/%.bpf.o: %.bpf.c common/vmlinux.h | $(OUTPUT)
 	$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) $(INCLUDES) $(CLANG_BPF_SYS_INCLUDES) -c $< -o $@
 
-$(OUTPUT)/irq_stat.bpf.linked.o: $(OUTPUT)/irq_stat.bpf.o
+$(OUTPUT)/%.bpf.linked.o: $(OUTPUT)/%.bpf.o
 	$(BPFTOOL) gen object $@ $<
 
-$(OUTPUT)/irq_stat.skel.h: $(OUTPUT)/irq_stat.bpf.linked.o
+$(OUTPUT)/%.skel.h: $(OUTPUT)/%.bpf.linked.o
 	$(BPFTOOL) gen skeleton $< > $@
 	sed -i 's|<bpf/libbpf.h>|<libbpf.h>|g' $@
 
-$(OUTPUT)/irq_stat.o: cpu/irq_stat.c $(OUTPUT)/irq_stat.skel.h | $(OUTPUT)
+$(OUTPUT)/%.o: %.c $(OUTPUT)/%.skel.h | $(OUTPUT)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(APPS): % : $(OUTPUT)/%.o $(LIBBPF_DIR)/libbpf.a
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -o cpu/$@
-	@echo "✅ 工具 $@ 编译完成"
+$(APPS): % : $(OUTPUT)/%.o $(LIBBPF_DIR)/staticobjs/libbpf.a
+	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $(BIN_DIR)/$@
 
 clean:
-	rm -rf $(OUTPUT) $(BIN_DIR)/*
+	rm -rf $(OUTPUT) $(BIN_DIR) $(OLD_BINARIES)
 	make -C $(LIBBPF_DIR) clean
 
 .PHONY: all clean $(APPS) $(CATEGORIES)

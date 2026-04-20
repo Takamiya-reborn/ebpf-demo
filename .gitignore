@@ -3,3 +3,4 @@
 /examples/c/.xmake
 /.idea
 !/my_tools/
+my_tools/bin/
