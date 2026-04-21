@@ -4,3 +4,4 @@
 /.idea
 !/my_tools/
 my_tools/bin/
+my_tools/.output
