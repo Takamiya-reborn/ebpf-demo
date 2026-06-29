@@ -4,6 +4,7 @@
 #include <libbpf.h>
 #include "bpf.h"
 #include "disk_delay.skel.h"
+#include "../common/kernel_utils.h"
 
 static void init_stats(struct disk_delay_bpf_linked *skel)
 {
@@ -32,18 +33,22 @@ static void print_stats(struct disk_delay_bpf_linked *skel)
 
     printf("\nDisk cache delay statistics:\n");
     if (count_write) {
-        printf("  write-to-cache avg latency: %llu ns (count=%llu)\n",
-               (unsigned long long)(total_write / count_write),
+        printf("disk_write_to_cache_avg_latency_ns: %llu\n",
+               (unsigned long long)(total_write / count_write));
+        printf("disk_write_to_cache_count: %llu\n",
                (unsigned long long)count_write);
     } else {
-        printf("  write-to-cache avg latency: N/A (no events)\n");
+        printf("disk_write_to_cache_avg_latency_ns: 0\n");
+        printf("disk_write_to_cache_count: 0\n");
     }
     if (count_flush) {
-        printf("  cache-to-disk avg latency: %llu ns (count=%llu)\n",
-               (unsigned long long)(total_flush / count_flush),
+        printf("disk_cache_to_disk_avg_latency_ns: %llu\n",
+               (unsigned long long)(total_flush / count_flush));
+        printf("disk_cache_to_disk_count: %llu\n",
                (unsigned long long)count_flush);
     } else {
-        printf("  cache-to-disk avg latency: N/A (no events)\n");
+        printf("disk_cache_to_disk_avg_latency_ns: 0\n");
+        printf("disk_cache_to_disk_count: 0\n");
     }
 }
 
@@ -73,32 +78,35 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 
-    links[1] = bpf_program__attach_kprobe(skel->progs.handle_ext4_file_write_iter, true, "ext4_file_write_iter");
-    if (!links[1]) {
+        // choose the best available kretprobe symbol
+    if (symbol_exists("ext4_file_write_iter")) {
+        links[1] = bpf_program__attach_kprobe(skel->progs.handle_ext4_file_write_iter, true, "ext4_file_write_iter");
+    } else if (symbol_exists("generic_file_write_iter")) {
         links[1] = bpf_program__attach_kprobe(skel->progs.handle_generic_file_write_iter, true, "generic_file_write_iter");
-        if (!links[1]) {
-            fprintf(stderr, "Failed to attach kretprobe ext4_file_write_iter or generic_file_write_iter\n");
-            err = 1;
-            goto cleanup;
-        }
+    } else if (symbol_exists("filemap_write_iter")) {
+        links[1] = bpf_program__attach_kprobe(skel->progs.handle_generic_file_write_iter, true, "filemap_write_iter");
+    } else {
+        fprintf(stderr, "No suitable file_write_iter symbol found in kernel; skipping kretprobe.\n");
+        links[1] = NULL;
     }
 
-    links[2] = bpf_program__attach_kprobe(skel->progs.handle_blk_mq_start_request, false, "blk_mq_start_request");
-    if (!links[2]) {
-        fprintf(stderr, "Failed to attach kprobe blk_mq_start_request\n");
-        err = 1;
-        goto cleanup;
+    // blk hooks
+    if (symbol_exists("blk_mq_start_request")) {
+        links[2] = bpf_program__attach_kprobe(skel->progs.handle_blk_mq_start_request, false, "blk_mq_start_request");
+    } else {
+        links[2] = NULL;
+        fprintf(stderr, "Warning: blk_mq_start_request not found; blk start probe skipped.\n");
     }
 
-    links[3] = bpf_program__attach_kprobe(skel->progs.handle_blk_update_request, false, "blk_update_request");
-    if (!links[3]) {
-        fprintf(stderr, "Failed to attach kprobe blk_update_request\n");
-        err = 1;
-        goto cleanup;
+    if (symbol_exists("blk_update_request")) {
+        links[3] = bpf_program__attach_kprobe(skel->progs.handle_blk_update_request, false, "blk_update_request");
+    } else {
+        links[3] = NULL;
+        fprintf(stderr, "Warning: blk_update_request not found; blk update probe skipped.\n");
     }
 
     init_stats(skel);
-    printf("Monitoring disk cache latencies... Press Ctrl+C to stop.\n");
+    fprintf(stderr, "Monitoring disk cache latencies... Press Ctrl+C to stop.\n");
 
     while (1) {
         print_stats(skel);

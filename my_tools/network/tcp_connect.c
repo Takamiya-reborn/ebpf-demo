@@ -38,9 +38,7 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 
-    printf("Monitoring TCP connect calls, press Ctrl+C to exit.\n");
-    printf("%-8s %-16s %-10s\n", "PID", "COMM", "COUNT");
-    printf("------------------------------------------------\n");
+    fprintf(stderr, "Monitoring TCP connect calls, press Ctrl+C to exit.\n");
 
     while (!exiting) {
         sleep(2);
@@ -50,10 +48,9 @@ int main(int argc, char **argv)
         while (bpf_map__get_next_key(skel->maps.conn_count, &pid, &next_pid, sizeof(pid)) == 0) {
             pid = next_pid;
             if (bpf_map__lookup_elem(skel->maps.conn_count, &pid, sizeof(pid), &info, sizeof(info), 0) == 0) {
-                printf("%-8u %-16s %-10llu\n", pid, info.comm, info.count);
+                printf("tcp_connect_pid_%u_comm_%s: %llu\n", pid, info.comm, info.count);
             }
         }
-        printf("------------------------------------------------\n");
     }
 
 cleanup:

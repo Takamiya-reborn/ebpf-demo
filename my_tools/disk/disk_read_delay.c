@@ -4,6 +4,7 @@
 #include <libbpf.h>
 #include "bpf.h"
 #include "disk_read_delay.skel.h"
+#include "../common/kernel_utils.h"
 
 static void init_stats(struct disk_read_delay_bpf_linked *skel)
 {
@@ -30,14 +31,10 @@ static void print_stats(struct disk_read_delay_bpf_linked *skel)
         return;
     }
 
-    printf("\nFile read latency statistics:\n");
-    if (count) {
-        printf("  vfs_read avg latency: %llu ns (count=%llu)\n",
-               (unsigned long long)(total / count),
-               (unsigned long long)count);
-    } else {
-        printf("  vfs_read avg latency: N/A (no events)\n");
-    }
+    printf("disk_read_vfs_read_avg_latency_ns: %llu\n",
+           count ? (unsigned long long)(total / count) : 0ULL);
+    printf("disk_read_vfs_read_count: %llu\n",
+           (unsigned long long)count);
 }
 
 int main(int argc, char **argv)
@@ -58,22 +55,26 @@ int main(int argc, char **argv)
     }
 
     struct bpf_link *links[2] = {NULL, NULL};
-    links[0] = bpf_program__attach_kprobe(skel->progs.handle_vfs_read_enter, false, "vfs_read");
-    if (!links[0]) {
-        fprintf(stderr, "Failed to attach kprobe vfs_read\n");
-        err = 1;
-        goto cleanup;
-    }
-
-    links[1] = bpf_program__attach_kprobe(skel->progs.handle_vfs_read_return, true, "vfs_read");
-    if (!links[1]) {
-        fprintf(stderr, "Failed to attach kretprobe vfs_read\n");
-        err = 1;
-        goto cleanup;
+    if (symbol_exists("vfs_read")) {
+        links[0] = bpf_program__attach_kprobe(skel->progs.handle_vfs_read_enter, false, "vfs_read");
+        if (!links[0]) {
+            fprintf(stderr, "Failed to attach kprobe vfs_read\n");
+            err = 1;
+            goto cleanup;
+        }
+        links[1] = bpf_program__attach_kprobe(skel->progs.handle_vfs_read_return, true, "vfs_read");
+        if (!links[1]) {
+            fprintf(stderr, "Failed to attach kretprobe vfs_read\n");
+            err = 1;
+            goto cleanup;
+        }
+    } else {
+        fprintf(stderr, "Warning: vfs_read symbol not found; skipping vfs_read probes.\n");
+        links[0] = links[1] = NULL;
     }
 
     init_stats(skel);
-    printf("Monitoring vfs_read latency... Press Ctrl+C to stop.\n");
+    fprintf(stderr, "Monitoring vfs_read latency... Press Ctrl+C to stop.\n");
 
     while (1) {
         print_stats(skel);

@@ -37,9 +37,7 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	printf("Monitoring IRQs, press Ctrl+C to exit. Stats every 2 seconds...\n");
-	printf("%-8s %-12s\n", "IRQ", "Count");
-	printf("----------------------------------------\n");
+	fprintf(stderr, "Monitoring IRQs, press Ctrl+C to exit. Stats every 2 seconds...\n");
 	while (!exiting) {
 		sleep(2);
 		int irq = -1, next_irq;
@@ -48,10 +46,9 @@ int main(int argc, char **argv)
 		while (bpf_map__get_next_key(skel->maps.irq_stats, &irq, &next_irq, sizeof(irq)) == 0) {
 			irq = next_irq;
 			if (bpf_map__lookup_elem(skel->maps.irq_stats, &irq, sizeof(irq), &info, sizeof(info), 0) == 0) {
-				printf("%-8d %-12llu\n", irq, info.count);
+				printf("irq_count_%d: %llu\n", irq, info.count);
 			}
 		}
-		printf("----------------------------------------\n");
 	}
 
 cleanup:

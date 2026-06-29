@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>eBPF Ops Insight</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- 引入图标库 -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+  <div class="app-wrapper">
+    <aside class="sidebar">
+      <div class="logo">
+        <i data-lucide="activity"></i>
+        <span>BPF Monitor</span>
+      </div>
+      <nav>
+        <div class="nav-item active"><i data-lucide="layout-dashboard"></i> 性能看板</div>
+        <div class="nav-item"><i data-lucide="terminal"></i> 实时日志</div>
+        <div class="nav-item"><i data-lucide="settings"></i> 配置中心</div>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h2>性能分析控制台</h2>
+        <div class="user-info">
+          <span id="run-status" class="status-badge idle">系统就绪</span>
+        </div>
+      </header>
+
+      <div class="content-grid">
+        <!-- 控制面板 -->
+        <section class="panel controls-panel">
+          <div class="form-group">
+            <label>选择分析工具</label>
+            <select id="tool-select"></select>
+          </div>
+          <div class="form-group">
+            <label>采样时长 (秒)</label>
+            <input id="duration-input" type="number" value="10">
+          </div>
+          <button id="run-btn" class="primary-btn">
+            <i data-lucide="play" size="18"></i>
+            <span>开始采集数据</span>
+          </button>
+        </section>
+
+        <!-- 图表展示 -->
+        <section class="panel chart-panel">
+          <div class="panel-header">
+            <h3><i data-lucide="bar-chart-3"></i> 指标分布直方图</h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-metrics"></canvas>
+          </div>
+        </section>
+
+        <!-- 统计摘要 -->
+        <section class="panel stats-panel">
+          <div class="panel-header">
+            <h3><i data-lucide="pie-chart"></i> 运行统计</h3>
+          </div>
+          <div id="tool-summary" class="stats-grid">
+            <div class="empty-state">等待数据流入...</div>
+          </div>
+        </section>
+
+        <!-- 日志输出 -->
+        <section class="panel terminal-panel">
+          <div class="panel-header">
+            <h3><i data-lucide="command"></i> 实时输出日志</h3>
+            <button class="icon-btn" onclick="document.getElementById('tool-output').textContent=''"><i
+                data-lucide="trash-2" size="14"></i></button>
+          </div>
+          <div class="terminal-wrapper">
+            <pre id="tool-output">System initialized. Waiting for command...</pre>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>

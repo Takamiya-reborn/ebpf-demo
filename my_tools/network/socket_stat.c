@@ -7,8 +7,15 @@
 #include "bpf.h"
 #include "socket_stat.skel.h"
 
+#define TASK_COMM_LEN 16
+
 struct family_info {
     uint64_t count;
+};
+
+struct pid_info {
+    uint64_t count;
+    char comm[TASK_COMM_LEN];
 };
 
 static volatile bool exiting = false;
@@ -54,9 +61,7 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 
-    printf("Monitoring socket creation by family, press Ctrl+C to exit.\n");
-    printf("%-10s %-10s\n", "FAMILY", "COUNT");
-    printf("-------------------------\n");
+    fprintf(stderr, "Monitoring socket creation by family and PID, press Ctrl+C to exit.\n");
 
     while (!exiting) {
         sleep(2);
@@ -66,10 +71,18 @@ int main(int argc, char **argv)
         while (bpf_map__get_next_key(skel->maps.family_count, &key, &next_key, sizeof(key)) == 0) {
             key = next_key;
             if (bpf_map__lookup_elem(skel->maps.family_count, &key, sizeof(key), &info, sizeof(info), 0) == 0) {
-                printf("%-10s %-10llu\n", family_name(key), (unsigned long long)info.count);
+                printf("socket_family_%s: %llu\n", family_name(key), (unsigned long long)info.count);
             }
         }
-        printf("-------------------------\n");
+
+        key = 0;
+        while (bpf_map__get_next_key(skel->maps.socket_pid_count, &key, &next_key, sizeof(key)) == 0) {
+            key = next_key;
+            struct pid_info pid_info;
+            if (bpf_map__lookup_elem(skel->maps.socket_pid_count, &key, sizeof(key), &pid_info, sizeof(pid_info), 0) == 0) {
+                printf("socket_pid_%u_comm_%s: %llu\n", key, pid_info.comm, (unsigned long long)pid_info.count);
+            }
+        }
     }
 
 cleanup:

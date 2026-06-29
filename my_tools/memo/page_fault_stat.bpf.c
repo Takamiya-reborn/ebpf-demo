@@ -4,7 +4,7 @@
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 2);
+    __uint(max_entries, 10240);
     __type(key, __u32);
     __type(value, __u64);
 } counter SEC(".maps");
@@ -12,13 +12,15 @@ struct {
 SEC("tracepoint/exceptions/page_fault_user")
 int handle_page_fault_user(void *ctx)
 {
-    __u32 key = 0; // user page faults
-    __u64 *val = bpf_map_lookup_elem(&counter, &key);
-    if (val) {
-        __sync_fetch_and_add(val, 1);
+    __u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 *val;
+    __u64 init = 1;
+
+    val = bpf_map_lookup_elem(&counter, &pid);
+    if (!val) {
+        bpf_map_update_elem(&counter, &pid, &init, BPF_ANY);
     } else {
-        __u64 init = 1;
-        bpf_map_update_elem(&counter, &key, &init, BPF_ANY);
+        __sync_fetch_and_add(val, 1);
     }
     return 0;
 }
@@ -26,13 +28,15 @@ int handle_page_fault_user(void *ctx)
 SEC("tracepoint/exceptions/page_fault_kernel")
 int handle_page_fault_kernel(void *ctx)
 {
-    __u32 key = 1; // kernel page faults
-    __u64 *val = bpf_map_lookup_elem(&counter, &key);
-    if (val) {
-        __sync_fetch_and_add(val, 1);
+    __u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 *val;
+    __u64 init = 1;
+
+    val = bpf_map_lookup_elem(&counter, &pid);
+    if (!val) {
+        bpf_map_update_elem(&counter, &pid, &init, BPF_ANY);
     } else {
-        __u64 init = 1;
-        bpf_map_update_elem(&counter, &key, &init, BPF_ANY);
+        __sync_fetch_and_add(val, 1);
     }
     return 0;
 }
