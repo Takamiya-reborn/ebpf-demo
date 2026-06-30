@@ -1,91 +1,47 @@
 #include <stdio.h>
 #include <unistd.h>
-#include <stdint.h>
 #include <libbpf.h>
-#include "bpf.h"
+#include <signal.h>
 #include "disk_read_delay.skel.h"
-#include "../common/kernel_utils.h"
 
-static void init_stats(struct disk_read_delay_bpf_linked *skel)
+struct stats_snapshot {
+	__u64 vfs_ts, vfs_cnt, blk_ts, blk_cnt;
+};
+static struct stats_snapshot prev = { 0 };
+static volatile bool exiting = false;
+static void sig_handler(int sig)
 {
-    __u32 keys[] = {0, 1};
-    __u64 value = 0;
-
-    for (int i = 0; i < 2; i++) {
-        bpf_map__update_elem(skel->maps.stats, &keys[i], sizeof(keys[i]), &value, sizeof(value), BPF_ANY);
-    }
+	exiting = true;
 }
 
-static void print_stats(struct disk_read_delay_bpf_linked *skel)
+int main()
 {
-    __u32 total_key = 0;
-    __u32 count_key = 1;
-    __u64 total = 0, count = 0;
+	struct disk_read_delay_bpf_linked *skel = disk_read_delay_bpf_linked__open_and_load();
+	if (!skel)
+		return 1;
+	signal(SIGINT, sig_handler);
+	skel->links.handle_vfs_read =
+		bpf_program__attach_kprobe(skel->progs.handle_vfs_read, false, "vfs_read");
+	skel->links.handle_vfs_read_ret =
+		bpf_program__attach_kprobe(skel->progs.handle_vfs_read_ret, true, "vfs_read");
+	skel->links.handle_blk_mq_start_request = bpf_program__attach_kprobe(
+		skel->progs.handle_blk_mq_start_request, false, "blk_mq_start_request");
+	skel->links.handle_blk_update_request = bpf_program__attach_kprobe(
+		skel->progs.handle_blk_update_request, false, "blk_update_request");
 
-    if (bpf_map__lookup_elem(skel->maps.stats, &total_key, sizeof(total_key), &total, sizeof(total), 0) != 0) {
-        fprintf(stderr, "Failed to lookup total latency\n");
-        return;
-    }
-    if (bpf_map__lookup_elem(skel->maps.stats, &count_key, sizeof(count_key), &count, sizeof(count), 0) != 0) {
-        fprintf(stderr, "Failed to lookup read count\n");
-        return;
-    }
-
-    printf("disk_read_vfs_read_avg_latency_ns: %llu\n",
-           count ? (unsigned long long)(total / count) : 0ULL);
-    printf("disk_read_vfs_read_count: %llu\n",
-           (unsigned long long)count);
-}
-
-int main(int argc, char **argv)
-{
-    struct disk_read_delay_bpf_linked *skel;
-    int err;
-
-    skel = disk_read_delay_bpf_linked__open();
-    if (!skel) {
-        fprintf(stderr, "Failed to open BPF skeleton\n");
-        return 1;
-    }
-
-    err = disk_read_delay_bpf_linked__load(skel);
-    if (err) {
-        fprintf(stderr, "Failed to load BPF program\n");
-        goto cleanup;
-    }
-
-    struct bpf_link *links[2] = {NULL, NULL};
-    if (symbol_exists("vfs_read")) {
-        links[0] = bpf_program__attach_kprobe(skel->progs.handle_vfs_read_enter, false, "vfs_read");
-        if (!links[0]) {
-            fprintf(stderr, "Failed to attach kprobe vfs_read\n");
-            err = 1;
-            goto cleanup;
-        }
-        links[1] = bpf_program__attach_kprobe(skel->progs.handle_vfs_read_return, true, "vfs_read");
-        if (!links[1]) {
-            fprintf(stderr, "Failed to attach kretprobe vfs_read\n");
-            err = 1;
-            goto cleanup;
-        }
-    } else {
-        fprintf(stderr, "Warning: vfs_read symbol not found; skipping vfs_read probes.\n");
-        links[0] = links[1] = NULL;
-    }
-
-    init_stats(skel);
-    fprintf(stderr, "Monitoring vfs_read latency... Press Ctrl+C to stop.\n");
-
-    while (1) {
-        print_stats(skel);
-        sleep(1);
-    }
-
-cleanup:
-    for (int i = 0; i < 2; i++) {
-        if (links[i])
-            bpf_link__destroy(links[i]);
-    }
-    disk_read_delay_bpf_linked__destroy(skel);
-    return err;
+	while (!exiting) {
+		__u64 cur[4] = { 0 };
+		for (int i = 0; i < 4; i++)
+			bpf_map__lookup_elem(skel->maps.stats, &i, sizeof(int), &cur[i],
+					     sizeof(__u64), 0);
+		printf("disk_read_vfs_total_us: %.3f\ndisk_read_vfs_count: %llu\n",
+		       (cur[0] - prev.vfs_ts) / 1000.0, cur[1] - prev.vfs_cnt);
+		printf("disk_read_block_total_us: %.3f\ndisk_read_block_count: %llu\n",
+		       (cur[2] - prev.blk_ts) / 1000.0, cur[3] - prev.blk_cnt);
+		fflush(stdout);
+		prev = (struct stats_snapshot){ cur[0], cur[1], cur[2], cur[3] };
+		sleep(1);
+	}
+	disk_read_delay_bpf_linked__destroy(skel);
+	return 0;
 }

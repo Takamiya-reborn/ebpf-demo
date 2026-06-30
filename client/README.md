@@ -89,25 +89,33 @@
 
 返回当前统计快照，包括运行次数、状态分布、最近一次输出大小、运行时长等。
 
-### 5. `POST /run/{tool_name}`
+### 5. `GET /run/stream/{tool_name}`
 
-触发工具运行。
+以 SSE（Server-Sent Events）方式触发工具运行并流式返回输出。
 
 参数：
 
 - `tool_name`：可执行工具名称，必须存在于 `my_tools/bin`
 - `duration`：可选查询参数，超时时间，默认 `10.0` 秒
 
-返回值示例：
+返回值：
 
-```json
-{
-  "tool": "irq_stat",
-  "status": "success",
-  "duration": 2.13,
-  "output": "...",
-  "parsed": {"count": 123}
-}
+- 流式事件 `data`，逐行返回工具输出
+- 结束事件包含最终状态、运行时长、解析后的指标、摘要和日志路径
+
+客户端示例：
+
+```js
+const es = new EventSource(`/run/stream/${tool}?duration=${duration}`);
+es.onmessage = (ev) => {
+  const data = JSON.parse(ev.data);
+  if (data.line) {
+    // 追加日志行
+  }
+  if (data.status) {
+    // 读取最终结果
+  }
+};
 ```
 
 ### 运行逻辑

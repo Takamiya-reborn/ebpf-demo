@@ -1,0 +1,45 @@
+Monitoring disk latencies (ms)... Press Ctrl+C to stop.
+
+--- Tick ---
+VFS Write (App->Cache):  Total:    0.191 ms | Count:    20 | Avg:    0.010 ms
+Block I/O (Cache->Disk): Total:    0.000 ms | Count:     0 | Avg:    0.000 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:   14.107 ms | Count:  1336 | Avg:    0.011 ms
+Block I/O (Cache->Disk): Total:    2.116 ms | Count:     2 | Avg:    1.058 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:    0.796 ms | Count:    40 | Avg:    0.020 ms
+Block I/O (Cache->Disk): Total:    0.217 ms | Count:     1 | Avg:    0.217 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:   14.222 ms | Count:  1860 | Avg:    0.008 ms
+Block I/O (Cache->Disk): Total:    0.313 ms | Count:     1 | Avg:    0.313 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:    0.482 ms | Count:    30 | Avg:    0.016 ms
+Block I/O (Cache->Disk): Total:    0.000 ms | Count:     0 | Avg:    0.000 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:   13.458 ms | Count:  1840 | Avg:    0.007 ms
+Block I/O (Cache->Disk): Total:    0.087 ms | Count:     1 | Avg:    0.087 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:    0.873 ms | Count:    46 | Avg:    0.019 ms
+Block I/O (Cache->Disk): Total:    0.490 ms | Count:     2 | Avg:    0.245 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:   13.127 ms | Count:  1837 | Avg:    0.007 ms
+Block I/O (Cache->Disk): Total:   54.794 ms | Count:    98 | Avg:    0.559 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:    0.680 ms | Count:    45 | Avg:    0.015 ms
+Block I/O (Cache->Disk): Total:    0.000 ms | Count:     0 | Avg:    0.000 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:    2.274 ms | Count:   688 | Avg:    0.003 ms
+Block I/O (Cache->Disk): Total:    0.216 ms | Count:     1 | Avg:    0.216 ms
+
+--- Tick ---
+VFS Write (App->Cache):  Total:   12.120 ms | Count:  1183 | Avg:    0.010 ms
+Block I/O (Cache->Disk): Total:    0.000 ms | Count:     0 | Avg:    0.000 ms
