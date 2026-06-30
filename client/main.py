@@ -21,29 +21,20 @@ from prometheus_client import (
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TOOL_BIN_DIR = PROJECT_ROOT / "my_tools" / "bin"
 
-ICON_MAP = {
-    "disk_delay": "💽",
-    "disk_read_delay": "📥",
-    "irq_stat": "⚡",
-    "mmap_stat": "🧠",
-    "oom_stat": "🔥",
-    "page_fault_stat": "📄",
-    "page_swap_stat": "🧾",
-    "read_stat": "📥",
-    "write_stat": "📤",
-    "socket_stat": "🌐",
-    "tcp_connect": "🔌",
-}
-
 STATUS_ICON = {"success": "✅", "error": "❌", "timeout": "⏱️", "unknown": "⚠️"}
 
-ALLOWED_TOOLS = sorted(
-    [
-        tool.name
-        for tool in TOOL_BIN_DIR.iterdir()
-        if tool.is_file() and os.access(tool, os.X_OK)
-    ]
-)
+
+def get_available_tools():
+    return sorted(
+        [
+            tool.name
+            for tool in TOOL_BIN_DIR.iterdir()
+            if tool.is_file() and os.access(tool, os.X_OK)
+        ]
+    )
+
+
+ALLOWED_TOOLS = get_available_tools()
 
 app = FastAPI(
     title="my_tools Prometheus + Grafana UI",
@@ -105,7 +96,6 @@ for t in ALLOWED_TOOLS:
 def make_tool_info(name: str) -> Dict[str, str]:
     return {
         "name": name,
-        "icon": ICON_MAP.get(name, "🧩"),
         "summary": name.replace("_", " ").capitalize(),
     }
 
@@ -180,7 +170,7 @@ async def metrics() -> HTMLResponse:
 
 @app.get("/api/tools")
 async def api_tools() -> JSONResponse:
-    tools = [make_tool_info(name) for name in ALLOWED_TOOLS]
+    tools = [make_tool_info(name) for name in get_available_tools()]
     return JSONResponse({"tools": tools})
 
 
@@ -192,12 +182,13 @@ async def api_stats() -> JSONResponse:
 
 @app.post("/run/{tool_name}")
 async def run_tool(tool_name: str, duration: float = Query(10.0)) -> JSONResponse:
-    if tool_name not in ALLOWED_TOOLS:
+    available_tools = get_available_tools()
+    if tool_name not in available_tools:
         raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
 
     tool_path = TOOL_BIN_DIR / tool_name
-    if not tool_path.exists():
-        raise HTTPException(status_code=404, detail=f"Tool binary not found: {tool_name}")
+    if not tool_path.exists() or not os.access(tool_path, os.X_OK):
+        raise HTTPException(status_code=404, detail=f"Tool binary not found or not executable: {tool_name}")
 
     # start process and enforce capture duration on server side
     tool_running.inc()

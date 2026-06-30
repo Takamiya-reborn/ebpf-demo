@@ -16,7 +16,7 @@ async function init() {
         data.tools.forEach(t => {
             const opt = document.createElement('option');
             opt.value = t.name;
-            opt.textContent = `${t.icon} ${t.name}`;
+            opt.textContent = t.name;
             UI.toolSelect.appendChild(opt);
         });
     } catch (e) {
