@@ -22,11 +22,10 @@ TOOL_BIN_DIR = PROJECT_ROOT / "my_tools" / "bin"
 RUN_LOG_DIR = PROJECT_ROOT / "run_logs"
 RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-# 导入你之前的工具配置 (简化版，你可以按需扩展)
 TOOL_CONFIGS = {
     "disk_write_delay": {"category": "latency", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
     "disk_read_delay": {"category": "latency", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
-    "irq_stat": {"category":"", "chart_type": "", "x_axis": "", "y_axis": "", "unit": ""},    
+    "irq_stat": {"category": "execve", "chart_type": "pie", "x_axis": "进程名", "y_axis": "启动次数", "unit": "次"},   
     "socket_stat": {"category": "network", "chart_type": "pie", "x_axis": "Socket类型/进程", "y_axis": "创建次数", "unit": "次"},
     "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"}
 }
@@ -112,19 +111,16 @@ async def run_tool_stream(tool_name: str, duration: float = Query(10.0)):
         try:
             while True:
                 try:
-                    # 使用 wait_for 实现超时控制
                     line_bytes = await asyncio.wait_for(process.stdout.readline(), timeout=0.1)
                     if not line_bytes: break
                     line = line_bytes.decode('utf-8', 'replace')
                     log_content.append(line)
                     yield {"data": json.dumps({"line": line})}
                 except asyncio.TimeoutError:
-                    # 检查是否整体运行超时
                     if asyncio.get_event_loop().time() - start_time > duration:
                         break
                     continue
             
-            # 正常或超时结束
             if process.returncode is None:
                 process.terminate()
             
