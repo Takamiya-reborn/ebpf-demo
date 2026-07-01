@@ -27,7 +27,9 @@ TOOL_CONFIGS = {
     "disk_read_delay": {"category": "latency", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
     "irq_stat": {"category": "execve", "chart_type": "pie", "x_axis": "进程名", "y_axis": "启动次数", "unit": "次"},   
     "socket_stat": {"category": "network", "chart_type": "pie", "x_axis": "Socket类型/进程", "y_axis": "创建次数", "unit": "次"},
-    "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"}
+    "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"},
+    "read_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
+    "write_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
 }
 DEFAULT_CONFIG = {"category": "generic", "chart_type": "bar", "x_axis": "指标", "y_axis": "数值", "unit": ""}
 
