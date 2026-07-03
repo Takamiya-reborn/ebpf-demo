@@ -7,43 +7,52 @@
 
 int main(int argc, char **argv)
 {
-    struct mmap_stat_bpf_linked *skel;
-    int err;
+	struct mmap_stat_bpf_linked *skel;
+	int err;
 
-    skel = mmap_stat_bpf_linked__open();
-    if (!skel) {
-        fprintf(stderr, "Failed to open BPF skeleton\n");
-        return 1;
-    }
+	skel = mmap_stat_bpf_linked__open();
+	if (!skel) {
+		fprintf(stderr, "Failed to open BPF skeleton\n");
+		return 1;
+	}
 
-    err = mmap_stat_bpf_linked__load(skel);
-    if (err) {
-        fprintf(stderr, "Failed to load BPF program\n");
-        goto cleanup;
-    }
+	err = mmap_stat_bpf_linked__load(skel);
+	if (err) {
+		fprintf(stderr, "Failed to load BPF program\n");
+		goto cleanup;
+	}
 
-    err = mmap_stat_bpf_linked__attach(skel);
-    if (err) {
-        fprintf(stderr, "Failed to attach BPF program\n");
-        goto cleanup;
-    }
+	err = mmap_stat_bpf_linked__attach(skel);
+	if (err) {
+		fprintf(stderr, "Failed to attach BPF program\n");
+		goto cleanup;
+	}
 
-    fprintf(stderr, "Monitoring mmap syscalls by PID, press Ctrl+C to stop.\n");
+	fprintf(stderr,
+		"Monitoring mmap syscalls by PID (Incremental per sec), press Ctrl+C to stop.\n");
 
-    while (1) {
-        uint32_t pid = 0, next_pid;
-        uint64_t value;
+	while (1) {
+		uint32_t pid = 0, next_pid;
+		uint64_t value;
+		uint64_t zero = 0; // 用于清零
 
-        while (bpf_map__get_next_key(skel->maps.counter, &pid, &next_pid, sizeof(pid)) == 0) {
-            pid = next_pid;
-            if (bpf_map__lookup_elem(skel->maps.counter, &pid, sizeof(pid), &value, sizeof(value), 0) == 0) {
-                printf("mmap_calls_pid_%u: %llu\n", pid, (unsigned long long)value);
-            }
-        }
-        sleep(1);
-    }
+		// 遍历 Map
+		while (bpf_map__get_next_key(skel->maps.counter, &pid, &next_pid, sizeof(pid)) ==
+		       0) {
+			pid = next_pid;
+			if (bpf_map__lookup_elem(skel->maps.counter, &pid, sizeof(pid), &value,
+						 sizeof(value), 0) == 0) {
+				// 打印当前的增量
+				printf("mmap_calls_pid_%u: %llu\n", pid, (unsigned long long)value);
+
+				bpf_map__update_elem(skel->maps.counter, &pid, sizeof(pid), &zero,
+						     sizeof(zero), BPF_EXIST);
+			}
+		}
+		sleep(1);
+	}
 
 cleanup:
-    mmap_stat_bpf_linked__destroy(skel);
-    return err;
+	mmap_stat_bpf_linked__destroy(skel);
+	return err;
 }

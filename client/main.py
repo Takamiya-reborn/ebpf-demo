@@ -30,6 +30,9 @@ TOOL_CONFIGS = {
     "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"},
     "read_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
     "write_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
+    "mmap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
+    "page_swap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "交换时长", "unit": "us"},
+    "page_fault_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程_PID", "y_axis": "缺页中断次数", "unit": "次"},
 }
 DEFAULT_CONFIG = {"category": "generic", "chart_type": "bar", "x_axis": "指标", "y_axis": "数值", "unit": ""}
 
