@@ -23,15 +23,15 @@ struct {
 	__uint(max_entries, 4);
 	__type(key, __u32);
 	__type(value, __u64);
-} stats SEC(".maps");
+} disk_write_stats SEC(".maps");
 
 static __always_inline void update_stat(__u32 key, __u64 delta)
 {
-	__u64 *val = bpf_map_lookup_elem(&stats, &key);
+	__u64 *val = bpf_map_lookup_elem(&disk_write_stats, &key);
 	if (val) {
 		__sync_fetch_and_add(val, delta);
 	} else {
-		bpf_map_update_elem(&stats, &key, &delta, BPF_ANY);
+		bpf_map_update_elem(&disk_write_stats, &key, &delta, BPF_ANY);
 	}
 }
 

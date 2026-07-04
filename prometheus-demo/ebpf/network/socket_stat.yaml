@@ -1,0 +1,20 @@
+name: socket_stat
+metrics:
+  counters:
+    - name: family_exporter
+      help: "Socket calls by address family"
+      table: family_exporter
+      labels:
+        - name: family
+          size: 4
+          decoders:
+            - name: uint32
+            
+    - name: socket_pid_exporter
+      help: "Socket calls by process name"
+      table: socket_pid_exporter
+      labels:
+        - name: comm
+          size: 16
+          decoders:
+            - name: string

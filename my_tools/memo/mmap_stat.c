@@ -37,15 +37,15 @@ int main(int argc, char **argv)
 		uint64_t zero = 0; // 用于清零
 
 		// 遍历 Map
-		while (bpf_map__get_next_key(skel->maps.counter, &pid, &next_pid, sizeof(pid)) ==
+		while (bpf_map__get_next_key(skel->maps.memo_counter, &pid, &next_pid, sizeof(pid)) ==
 		       0) {
 			pid = next_pid;
-			if (bpf_map__lookup_elem(skel->maps.counter, &pid, sizeof(pid), &value,
+			if (bpf_map__lookup_elem(skel->maps.memo_counter, &pid, sizeof(pid), &value,
 						 sizeof(value), 0) == 0) {
 				// 打印当前的增量
 				printf("mmap_calls_pid_%u: %llu\n", pid, (unsigned long long)value);
 
-				bpf_map__update_elem(skel->maps.counter, &pid, sizeof(pid), &zero,
+				bpf_map__update_elem(skel->maps.memo_counter, &pid, sizeof(pid), &zero,
 						     sizeof(zero), BPF_EXIST);
 			}
 		}

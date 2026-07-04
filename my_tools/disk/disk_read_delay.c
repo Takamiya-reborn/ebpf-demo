@@ -32,7 +32,7 @@ int main()
 	while (!exiting) {
 		__u64 cur[4] = { 0 };
 		for (int i = 0; i < 4; i++)
-			bpf_map__lookup_elem(skel->maps.stats, &i, sizeof(int), &cur[i],
+			bpf_map__lookup_elem(skel->maps.disk_read_stats, &i, sizeof(int), &cur[i],
 					     sizeof(__u64), 0);
 		printf("disk_read_vfs_total_us: %.3f\ndisk_read_vfs_count: %llu\n",
 		       (cur[0] - prev.vfs_ts) / 1000.0, cur[1] - prev.vfs_cnt);

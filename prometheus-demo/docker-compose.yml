@@ -1,0 +1,48 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9091:9090"
+    restart: always
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    restart: always
+
+  # 新增 Node Exporter 部分
+  node-exporter:
+    image: prom/node-exporter:v1.6.0
+    container_name: node-exporter
+    restart: always
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+  ebpf-exporter:
+    image: ghcr.io/cloudflare/ebpf_exporter:v2.4.2
+    container_name: ebpf-exporter
+    privileged: true
+    pid: "host"
+    volumes:
+      - ./ebpf:/examples
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+    command:
+      - "--config.dir=/examples"
+      - "--config.names=cpu/irq_stat,disk/disk_read_delay,disk/disk_write_delay,file/read_stat,file/write_stat,memo/mmap_stat,memo/page_fault_stat,memo/page_swap_stat,network/socket_stat,network/tcp_connect"
+    ports:
+      - "9435:9435"
+    restart: always

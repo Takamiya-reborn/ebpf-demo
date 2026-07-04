@@ -1,0 +1,21 @@
+name: page_swap_stat
+compiled_code: /examples/memo/page_swap_stat.bpf.o
+metrics:
+  gauges:
+    - name: start_ts
+      help: "Timestamp when reclaim started per PID"
+      table: start_ts
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32
+  counters:
+    - name: total_delay
+      help: "Total reclaim delay in nanoseconds per PID"
+      table: total_delay
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32

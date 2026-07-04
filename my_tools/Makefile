@@ -26,6 +26,8 @@ LDFLAGS += -L$(LIBBPF_DIR) -lbpf -lelf -lz -pthread
 
 # 默认目标：make 时执行 all
 .DEFAULT_GOAL := all
+INTERMEDIATE_FILES = $(addprefix $(OUTPUT)/,$(APPS:=.bpf.o))
+.SECONDARY: $(INTERMEDIATE_FILES)
 
 vpath %.bpf.c $(CATEGORIES)
 vpath %.c $(CATEGORIES)

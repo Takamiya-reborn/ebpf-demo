@@ -1,0 +1,12 @@
+name: disk_write_delay
+compiled_code: /examples/disk/disk_write_delay.bpf.o
+metrics:
+  counters:
+    - name: disk_write_stats
+      help: "Disk write metrics. Index: 0=total_latency, 1=count, 2=flush_latency, 3=flush_count"
+      table: disk_write_stats
+      labels:
+        - name: op_index
+          size: 4
+          decoders:
+            - name: uint32

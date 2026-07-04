@@ -22,13 +22,13 @@ static void print_incremental_stats(struct disk_write_delay_bpf_linked *skel)
 	__u64 curr_total_flush = 0, curr_count_flush = 0;
 
 	// 从 Map 中读取当前累加值
-	bpf_map__lookup_elem(skel->maps.stats, &total_write_key, sizeof(__u32), &curr_total_write,
+	bpf_map__lookup_elem(skel->maps.disk_write_stats, &total_write_key, sizeof(__u32), &curr_total_write,
 			     sizeof(__u64), 0);
-	bpf_map__lookup_elem(skel->maps.stats, &count_write_key, sizeof(__u32), &curr_count_write,
+	bpf_map__lookup_elem(skel->maps.disk_write_stats, &count_write_key, sizeof(__u32), &curr_count_write,
 			     sizeof(__u64), 0);
-	bpf_map__lookup_elem(skel->maps.stats, &total_flush_key, sizeof(__u32), &curr_total_flush,
+	bpf_map__lookup_elem(skel->maps.disk_write_stats, &total_flush_key, sizeof(__u32), &curr_total_flush,
 			     sizeof(__u64), 0);
-	bpf_map__lookup_elem(skel->maps.stats, &count_flush_key, sizeof(__u32), &curr_count_flush,
+	bpf_map__lookup_elem(skel->maps.disk_write_stats, &count_flush_key, sizeof(__u32), &curr_count_flush,
 			     sizeof(__u64), 0);
 
 	// 计算这一秒内的增量

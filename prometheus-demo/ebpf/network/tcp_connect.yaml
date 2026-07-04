@@ -1,0 +1,12 @@
+name: tcp_connect
+compiled_code: /examples/network/tcp_connect.bpf.o
+metrics:
+  counters:
+    - name: conn_exporter
+      help: "Total number of TCP connections per process"
+      table: conn_exporter
+      labels:
+        - name: comm
+          size: 16
+          decoders:
+            - name: string

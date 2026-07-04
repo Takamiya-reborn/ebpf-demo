@@ -1,0 +1,13 @@
+name: irq_stat
+compiled_code: /examples/cpu/irq_stat.bpf.o
+metrics:
+  counters:
+    - name: irq_stats
+      help: "Total count of execve calls by process name"
+      table: irq_stats
+      labels:
+        - name: comm
+          size: 16
+          decoders:
+            - name: string
+      value: count

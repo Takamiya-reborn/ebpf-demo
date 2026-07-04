@@ -46,7 +46,7 @@ int main(int argc, char **argv)
 		uint32_t pid = 0, next_pid;
 		int count = 0;
 
-		while (bpf_map__get_next_key(skel->maps.counter, &pid, &next_pid, sizeof(pid)) ==
+		while (bpf_map__get_next_key(skel->maps.file_read_counter, &pid, &next_pid, sizeof(pid)) ==
 		       0) {
 			if (count >= MAX_ENTRIES)
 				break;
@@ -57,11 +57,11 @@ int main(int argc, char **argv)
 		for (int i = 0; i < count; i++) {
 			uint32_t cur_pid = pids[i];
 			uint64_t value;
-			if (bpf_map__lookup_elem(skel->maps.counter, &cur_pid, sizeof(cur_pid),
+			if (bpf_map__lookup_elem(skel->maps.file_read_counter, &cur_pid, sizeof(cur_pid),
 						 &value, sizeof(value), 0) == 0) {
 				// 适配你的 Python 正则格式
 				printf("PID_%u: %llu\n", cur_pid, (unsigned long long)value);
-				bpf_map__delete_elem(skel->maps.counter, &cur_pid, sizeof(cur_pid),
+				bpf_map__delete_elem(skel->maps.file_read_counter, &cur_pid, sizeof(cur_pid),
 						     0);
 			}
 		}

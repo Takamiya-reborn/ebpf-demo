@@ -1,0 +1,12 @@
+name: read_stat
+compiled_code: /examples/file/read_stat.bpf.o
+metrics:
+  counters:
+    - name: file_read_counter
+      help: "Total number of sys_enter_read events per PID"
+      table: file_read_counter
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32

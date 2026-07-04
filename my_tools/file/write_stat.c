@@ -34,9 +34,9 @@ int main(int argc, char **argv)
         uint32_t pid = 0, next_pid;
         uint64_t value;
 
-        while (bpf_map__get_next_key(skel->maps.counter, &pid, &next_pid, sizeof(pid)) == 0) {
+        while (bpf_map__get_next_key(skel->maps.file_write_counter, &pid, &next_pid, sizeof(pid)) == 0) {
             pid = next_pid;
-            if (bpf_map__lookup_elem(skel->maps.counter, &pid, sizeof(pid), &value, sizeof(value), 0) == 0) {
+            if (bpf_map__lookup_elem(skel->maps.file_write_counter, &pid, sizeof(pid), &value, sizeof(value), 0) == 0) {
                 printf("write_calls_pid_%u: %llu\n", pid, (unsigned long long)value);
             }
         }
