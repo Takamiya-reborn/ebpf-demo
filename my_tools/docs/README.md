@@ -1,207 +1,107 @@
-# my_tools 文档
+# my_tools — 基于 libbpf 的系统分析工具集合（更新）
 
-## 概要
+本文件基于源码审阅生成，反映当前 `my_tools` 的实际工具、运行方式和输出格式。目标读者：开发者、运维和 `client` 前端集成维护者。
 
-`my_tools` 目录是一套基于 eBPF 的系统分析工具集合，用于采集 CPU、磁盘、文件、内存和网络相关的运行时指标。每个工具由 BPF 程序和用户态加载器组成，适合在 Linux 环境中执行，并可被 `client` 目录下的 Web 控制台统一管理。
+**重要**：`client`（[client/main.py](../../client/main.py#L1)）会扫描 `my_tools/bin/` 并以 `sudo` 无交互方式执行工具，期望工具输出为可解析的 `key: value` 或单行 JSON 字典。
 
-## 目录结构
+## 目录摘要
 
-- `Makefile`：构建入口，支持按分类构建并生成 `bin/` 中的可执行文件。
-- `common/`：公共头文件和类型定义，包含 `kernel_utils.h`、`vmlinux.h` 等。
-- `bin/`：编译后输出的可执行工具，用于直接运行或被 `client` 调用。
-- `cpu/`、`disk/`、`file/`、`memo/`、`network/`：按功能分类组织 BPF 程序和用户态加载器源码。
-- `docs/README.md`：本说明文档。
+- `Makefile`：按分类（`cpu/disk/file/memo/network`）构建 BPF 程序与用户态加载器，输出到 `bin/`。构建流程使用 `clang -target bpf` 编译 `.bpf.c`，并用 `bpftool` 生成 skeleton。
+- `common/`：公共头文件（`vmlinux.h`、`kernel_utils.h`），供 BPF 程序和用户态引用。
+- `bin/`：构建产物，包含可直接执行的用户态工具。
+- 分类源码目录：包含每个工具的 `.bpf.c`（内核 BPF 程序）和 `.c`（用户态加载器）。
 
-## 设计理念
+当前可用工具（位于 `my_tools/bin/`）：
 
-- 以 `libbpf` 为基础，将 BPF 程序与用户态逻辑分离。
-- 通过 BPF map 聚合内核事件，用户态周期性读取并输出统计结果。
-- 工具输出尽量保持简单、可解析，方便外部系统（例如 `client`）抓取和展示。
-- 支持通过 `my_tools/bin` 目录作为统一挂载点，客户端能动态检测并执行工具。
+- `irq_stat` — CPU / IRQ 统计
+- `disk_read_delay` — 磁盘读延迟（增量/秒）
+- `disk_write_delay` — 磁盘写延迟（增量/秒）
+- `mmap_stat` — `mmap()` 调用统计（按 PID 增量）
+- `page_fault_stat` — 页面错误统计（按进程）
+- `page_swap_stat` — 页面交换延迟（按 PID 增量，单位 us）
+- `read_stat` — `read()` 调用统计（按 PID 增量）
+- `write_stat` — `write()` 调用统计（按 PID 增量）
+- `socket_stat` — `socket()` / 协议族与进程统计
+- `tcp_connect` — TCP 连接请求统计（按 PID / comm）
 
-## 构建流程
+## 构建与运行
 
-在 `my_tools` 根目录运行：
-
-```bash
-cd /home/takamiya/Document/gitee/libbpf-bootstrap/my_tools
-make
-```
-
-可选构建分类：
+在 `my_tools` 根目录执行：
 
 ```bash
-make cpu
-make disk
-make file
-make memo
+cd my_tools
+make          # 构建所有分类
+# 或按类别构建，例如：
 make network
 ```
 
-构建完成后，所有用户态工具会输出到：
-
-- `my_tools/bin/`
-
-执行示例：
+构建完成后，运行示例：
 
 ```bash
 sudo ./bin/irq_stat
 sudo ./bin/tcp_connect
 ```
 
-## 接口与挂载点
+注意：多数工具会以 `sleep(1)` 或 `sleep(2)` 的周期轮询 BPF maps 并输出增量/快照；有些工具在输出后会清理 map（以实现差分统计）。
 
-### 工具执行接口
+## 输出格式规范（按现有实现总结）
 
-每个工具通过二进制执行文件提供最简单的接口：
+client 使用 `parse_output_metrics()` 对工具输出做解析，支持两类格式：
 
-```bash
-sudo ./bin/<tool_name>
-```
+- 单行 JSON 字典，例如 `{"metrics": 123}`；
+- 简洁的 `key: value` 或 `key=value` 格式（行内只有一个数值），以及以 `PID_...` 或 `write_calls_pid_...` 形式标签化的数值行。
 
-该命令通常会持续运行，周期性输出当前统计信息；也可能在启动后打印单次结果并退出。工具对外输出遵循以下设计原则：
+工具实现中的常见输出示例：
 
-- 输出可直接阅读
-- 优先支持 JSON 或 `key: value` 格式
-- 方便外部解析器提取数字指标
+- irq_stat：多行 JSON，每行为 `{"IRQ_NAME": count}` 或 `{"others": count}`。
+- disk_*：带单位后缀的 key，例如 `disk_write_vfs_total_us: 12.345`、`disk_write_vfs_count: 3`。
+- read_stat / write_stat / mmap_stat / tcp_connect / page_swap_stat：以进程为维度的行，例如 `PID_1234: 56`、`write_calls_pid_1234: 7`、`mmap_calls_pid_1234: 2`、`PID_123_comm: 9`。
+- socket_stat：协议族与进程两部分，示例 `Family_AF_INET: 10`、`PID_1234_comm: 5`。
 
-### 统一挂载点
+建议：保持每行只包含一个易解析的数值项，输出行以 `key[:=] value` 或单行 JSON 字典结束。
 
-`my_tools/bin/` 是客户端管理的统一挂载点，`client/main.py` 会扫描该目录下所有可执行文件，并将其纳入可用工具列表。只要工具被放入此目录并具有执行权限，就能被 `client` 自动发现。
+## 各工具运行与实现要点（源码摘录后的摘要）
 
-## 公共实现模式
+- `irq_stat` (`cpu/irq_stat.c`)
+  - 加载 `irq_stat.bpf.c` skeleton，附加 tracepoint 并每秒遍历 `irq_stats` map。
+  - 输出前 N 条（默认 5）为 JSON 行，超出项合并为 `{"others": N}`。
 
-### BPF 程序部分
+- `disk_write_delay` / `disk_read_delay` (`disk/*.c`)
+  - 通过 kprobe 附加 `vfs_write` / `vfs_read` 以及 block 层相关函数，maps 聚合累计耗时与计数。
+  - 用户态每秒读取累加值并与上次快照差分，输出如 `disk_write_vfs_total_us`（浮点）与 `disk_write_vfs_count`（整数）。
 
-- 文件名后缀为 `.bpf.c`
-- 主要职责是：
-  - 定义 eBPF maps
-  - 附加 tracepoint 或 kprobe
-  - 采集事件数据并写入 map
-- 常见类型：
-  - `BPF_MAP_TYPE_HASH`
-  - `BPF_MAP_TYPE_ARRAY`
-  - `BPF_MAP_TYPE_PERF_EVENT_ARRAY`
+- `read_stat` / `write_stat` (`file/*.c`)
+  - BPF map 按 PID 计数，用户态遍历 map 并输出 `PID_<pid>: <count>` 或 `write_calls_pid_<pid>: <count>`。
+  - 用户态通常在读取后删除 map 中的键以实现增量统计。
 
-### 用户态加载器部分
+- `mmap_stat` / `page_fault_stat` / `page_swap_stat` (`memo/*.c`)
+  - `mmap_stat`：按 PID 输出增量 `mmap_calls_pid_<pid>` 并尝试将值清零以实现增量。
+  - `page_fault_stat`：以 `comm_pid: count` 格式输出并删除条目。
+  - `page_swap_stat`：保存本地 `prev_values[]` 快照，输出 `dr_pid_<pid>: <incremental_us>`。
 
-- 文件名通常与目录名相同，例如 `cpu/irq_stat.c`
-- 主要职责是：
-  - 使用 `libbpf` 加载 BPF 程序
-  - 附加 BPF 程序到内核事件
-  - 循环读取 BPF map
-  - 格式化输出统计结果
+- `socket_stat` / `tcp_connect` (`network/*.c`)
+  - `socket_stat` 输出协议族统计 `Family_<NAME>: <count>` 以及 `PID_<pid>_<comm>: <count>`。
+  - `tcp_connect` 输出 `PID_<pid>_<comm>: <count>` 并在输出后删除 map 条目。
 
-### 常见实现细节
+## 集成注意事项与已识别问题
 
-- 使用 `vmlinux.h` 提取内核结构体定义，保证 BPF 程序与当前内核类型一致。
-- 使用 `bpf_map__get_next_key()` 遍历 map，使用 `bpf_map__lookup_elem()` 读取数据。
-- 通过 `signal(SIGINT)` 或轮询机制控制退出行为。
-- 仅在必要时使用 kprobe/kretprobe 记录延迟，否则优先使用 tracepoint 简化稳定性。
+- `client/main.py` 的 `parse_output_metrics()` 正则表达式匹配有限：它仅识别单个浮点或整数值行，或可解析为字典的 JSON 行。若你修改工具输出，务必保持兼容或同时更新 `client` 的解析逻辑（参见 [client/main.py](../../client/main.py#L1) 的 `parse_output_metrics` 实现）。
+- 若工具在用户态使用 `bpf_map__delete_elem()` 清理 map，`client` 若实时读取工具 stdout，应注意可能存在短时间内无数据的窗口。
+- `Makefile` 中将 `clang -target bpf` 与 `bpftool` 用于生成 skeletons；确保构建机器上已安装 `clang`、`bpftool` 和 `libbpf` 的开发头文件。
 
-## 工具分类与功能
+## 文档已更新的变更点（相对于旧版）
 
-### CPU 类
+- 用源码实际的工具清单替换了旧版的通用描述，修正了 `bin/` 中存在的工具名称。
+- 明确说明了 `client` 的执行方式与 `parse_output_metrics` 的解析约束。
+- 为每个工具补充了输出示例与字段命名规则，方便前端解析与扩展。
 
-#### `irq_stat`
+## 下一步建议
 
-- 监控系统中断次数。
-- 通过 `tracepoint/irq/irq_handler_entry` 记录每个 IRQ 的触发情况。
-- 输出格式通常为 `IRQ: count` 列表。
+- 为常用工具添加 `--help` 与 `--interval` 参数支持，并提供 `--json` 切换，便于 `client` 区分机器可读输出与人类可读日志。
+- 在 `client/main.py` 中增加对 `PID_*`、`write_calls_pid_*` 等更丰富键名的解析测试用例。
+- 编写短小的 `README` 片段并放置在每个工具源目录，说明用途与输出示例。
 
-### 磁盘类
-
-#### `disk_delay`
-
-- 统计磁盘写入延迟。
-- 通过 kprobe 拦截关键写路径并计算时间差。
-- 输出平均延迟、最大延迟等。
-
-#### `disk_read_delay`
-
-- 统计磁盘读取延迟。
-- 跟踪读取入口和返回事件，聚合延迟数据。
-
-### 文件类
-
-#### `read_stat`
-
-- 统计系统调用 `read()` 次数。
-- 使用 tracepoint `sys_enter_read`。
-- 输出 `read` 调用总次数和可能的按进程分布。
-
-#### `write_stat`
-
-- 统计系统调用 `write()` 次数。
-- 使用 tracepoint `sys_enter_write`。
-
-### 内存类
-
-#### `mmap_stat`
-
-- 统计 `mmap()` 调用与内存映射行为。
-- 可用于分析内存映射热点和使用模式。
-
-#### `oom_stat`
-
-- 监控 OOM 事件发生。
-- 适合用于发现内存压力引发的进程终止。
-
-#### `page_fault_stat`
-
-- 统计页面错误事件。
-- 适用于分析缺页、页面访问模式。
-
-#### `page_swap_stat`
-
-- 统计页面交换行为。
-- 监测 swap in/out 活动。
-
-### 网络类
-
-#### `tcp_connect`
-
-- 统计 TCP 连接请求。
-- 通过 kprobe 附加 `tcp_v4_connect` / `tcp_v6_connect`。
-- 输出按 PID 或进程名统计的连接次数。
-
-#### `socket_stat`
-
-- 统计 `socket()` 调用的协议族分布。
-- 使用 tracepoint `sys_enter_socket`。
-- 输出协议族和创建次数。
-
-## 工具接口设计建议
-
-对于工具本身，建议保持以下接口风格：
-
-- 默认为无参数运行
-- 输出结构化文本或 JSON
-- 支持通过 `SIGINT` 退出
-- 提供周期性统计快照
-- 可在用户态使用 `stderr` 输出诊断信息
-
-## 与 client 的集成
-
-`my_tools` 生成的工具可以直接被 `client` 前端调用。在集成时需要注意：
-
-- `client` 默认使用 `sudo` 执行工具
-- 工具应当放在 `my_tools/bin/`
-- 输出应尽量可解析，以便 `client` 能提取数值指标
-- 如果输出格式发生变化，应同步更新 `client/main.py` 中的 `parse_output_metrics()`
-
-## 运行示例
-
-```bash
-cd /home/takamiya/Document/gitee/libbpf-bootstrap/my_tools
-make network
-sudo ./bin/tcp_connect
-sudo ./bin/socket_stat
-```
-
-## 未来扩展
-
-- 为 `bin/` 工具增加 CLI 参数支持，比如 `--interval`、`--pid`、`--json`
-- 支持将输出写入 JSON/CSV 文件，方便后续分析
-- 增加更多场景工具，如 XDP、cgroup skb、容器网络指标
-- 将 `my_tools` 作为库组件，支持独立编程式调用
+如果你希望我现在：
+- 1) 将本次更新保存并提交为 patch（我可以生成 patch 并应用），或
+- 2) 先把变更草案以 PR 描述格式输出供你审阅，
+请回复你想要的下一步操作。 
