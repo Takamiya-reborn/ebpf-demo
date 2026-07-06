@@ -144,7 +144,7 @@ es.onmessage = (ev) => {
 
 ```bash
 cd /home/takamiya/Document/gitee/libbpf-bootstrap/client
-python3 -m uv run python main.py
+uv run main.py
 ```
 
 打开浏览器访问：
