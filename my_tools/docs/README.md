@@ -1,114 +1,126 @@
-# my_tools 模块化设计说明
+# my_tools — 基于 libbpf 的系统分析工具集合（更新）
 
-这是一个基于 libbpf-bootstrap 的 eBPF 工具集合，目标是把系统观测能力拆成清晰的模块，每个模块独立实现、独立构建、独立运行。
+本文件基于源码审阅生成，反映当前 `my_tools` 的实际工具、运行方式和输出格式。目标读者：开发者、运维和 `client` 前端集成维护者。
 
-## 1. 设计目标
+**重要**：`client`（[client/main.py](../../client/main.py#L1)）会扫描 `my_tools/bin/` 并以 `sudo` 无交互方式执行工具，期望工具输出为可解析的 `key: value` 或单行 JSON 字典。
 
-- 模块化：每类观测能力放在独立目录下，便于维护和扩展。
-- 低耦合：BPF 程序负责采集数据，用户态程序负责加载、读取和输出。
-- 易扩展：新增工具时只需要补充对应的 `.bpf.c` 与 `.c` 文件即可。
-- 统一构建：通过顶层 Makefile 自动发现并编译各模块。
+## 目录摘要
 
-## 2. 目录结构
+- `Makefile`：按分类（`cpu/disk/file/memo/network`）构建 BPF 程序与用户态加载器，输出到 `bin/`。构建流程使用 `clang -target bpf` 编译 `.bpf.c`，并用 `bpftool` 生成 skeleton。
+- `common/`：公共头文件（`vmlinux.h`、`kernel_utils.h`），供 BPF 程序和用户态引用。
+- `bin/`：构建产物，包含可直接执行的用户态工具。
+- 分类源码目录：包含每个工具的 `.bpf.c`（内核 BPF 程序）和 `.c`（用户态加载器）。
 
-- `common/`：公共头文件和辅助定义。
-- `cpu/`：CPU / IRQ 相关观测。
-- `disk/`：磁盘 I/O 延迟观测。
-- `file/`：文件系统调用统计。
-- `memo/`：内存与页错误相关观测。
-- `network/`：网络连接与套接字相关观测。
-- `bin/`：构建产物，保存最终可执行工具。
-- `docs/`：本说明文档。
+当前可用工具（位于 `my_tools/bin/`，共 20 个）：
 
-## 3. 模块职责
+### CPU 工具（4个）
+- `irq_stat` — execve 进程启动统计
+- `cpu_run_delay` — 调度器运行队列延迟（wakeup → on-CPU 耗时，按 PID）
+- `cpu_usage` — 进程 CPU 使用时间（按 PID 和 CPU 核心）
+- `cpu_freq_stat` — CPU 频率动态调节监控（每核心频率，MHz）
 
-### cpu
-- 负责 CPU 相关事件统计。
-- 当前工具：`irq_stat`。
-- 作用：统计 IRQ 相关事件，适合观察中断分布情况。
+### Disk 工具（4个）
+- `disk_read_delay` — 磁盘读延迟（VFS + Block 层，增量/秒）
+- `disk_write_delay` — 磁盘写延迟（VFS + Block 层，增量/秒）
+- `disk_io_size` — 块设备 I/O 请求大小分布（读写字节数/次数）
+- `disk_io_sched` — 块设备 I/O 完成延迟（issue → complete，含最大延迟）
 
-### disk
-- 负责磁盘 I/O 延迟统计。
-- 当前工具：`disk_read_delay`、`disk_write_delay`。
-- 作用：观察读写路径的延迟分布和累计耗时。
+### File 工具（4个）
+- `read_stat` — `read()` 调用统计（按 PID 增量）
+- `write_stat` — `write()` 调用统计（按 PID 增量）
+- `file_open_stat` — 文件打开操作统计（按 PID 和进程名，含失败计数）
+- `file_fsync_stat` — fsync/fdatasync 延迟统计（按 PID，含平均延迟）
 
-### file
-- 负责文件相关系统调用统计。
-- 当前工具：`read_stat`、`write_stat`。
-- 作用：统计 `read()` / `write()` 的调用次数，便于分析文件访问热点。
+### Memory 工具（4个）
+- `mmap_stat` — `mmap()` 调用统计（按 PID 增量）
+- `page_fault_stat` — 缺页中断统计（用户态/内核态，按进程）
+- `page_swap_stat` — 直接页面回收延迟（按 PID，单位 us）
+- `mem_oom_stat` — OOM Killer 事件追踪（全局计数 + 按 PID）
 
-### memo
-- 负责内存相关事件统计。
-- 当前工具：`mmap_stat`、`page_fault_stat`、`page_swap_stat`。
-- 作用：观察内存映射、缺页和换页相关行为。
+### Network 工具（4个）
+- `socket_stat` — `socket()` 系统调用协议族与进程统计
+- `tcp_connect` — TCP 连接请求统计（按 PID / comm）
+- `net_tcp_retransmit` — TCP 重传事件追踪（按 PID 和进程名，网络稳定性关键指标）
+- `net_udp_stat` — UDP 发送/接收统计（按 PID，含字节数）
 
-### network
-- 负责网络相关事件统计。
-- 当前工具：`socket_stat`、`tcp_connect`。
-- 作用：查看套接字创建和 TCP 连接建立情况。
-
-## 4. 实现模式
-
-每个模块遵循相同的开发模式：
-
-1. 在对应目录下编写 BPF 程序文件，例如 `xxx.bpf.c`。
-2. 编写用户态加载器文件，例如 `xxx.c`。
-3. 在用户态程序中完成挂载、读取 map、输出统计结果。
-4. 通过顶层 Makefile 统一构建为可执行文件。
-
-这种模式让每个工具都具有相似的结构，便于学习、复用和后续扩展。
-
-## 5. 构建方式
+## 构建与运行
 
 在 `my_tools` 根目录执行：
 
 ```bash
-make
-```
-
-如果只构建某一类模块：
-
-```bash
-make cpu
-make disk
-make file
-make memo
+cd my_tools
+make          # 构建所有分类
+# 或按类别构建，例如：
 make network
 ```
 
-构建完成后，生成的可执行文件会输出到 `bin/` 目录中。
-
-## 6. 运行方式
-
-例如：
+构建完成后，运行示例：
 
 ```bash
 sudo ./bin/irq_stat
-sudo ./bin/disk_read_delay
 sudo ./bin/tcp_connect
 ```
 
-多数工具会周期性轮询 BPF map，并输出增量或快照数据。输出形式通常为易于观察的键值对或简单统计行。
+注意：多数工具会以 `sleep(1)` 或 `sleep(2)` 的周期轮询 BPF maps 并输出增量/快照；有些工具在输出后会清理 map（以实现差分统计）。
 
-## 7. 设计原则
+## 输出格式规范（按现有实现总结）
 
-- 一个目录对应一个主题。
-- 一个工具由 BPF 部分和用户态部分组成。
-- 公共能力放在 `common/`，避免重复定义。
-- 构建规则尽量自动化，减少手工维护。
-- 输出结果尽量简洁，方便后续集成和监控展示。
+client 使用 `parse_output_metrics()` 对工具输出做解析，支持两类格式：
 
-## 8. 扩展建议
+- 单行 JSON 字典，例如 `{"metrics": 123}`；
+- 简洁的 `key: value` 或 `key=value` 格式（行内只有一个数值），以及以 `PID_...` 或 `write_calls_pid_...` 形式标签化的数值行。
 
-新增一个工具时，推荐按以下步骤进行：
+工具实现中的常见输出示例：
 
-1. 选择合适的模块目录，例如 `network/`。
-2. 新增 `tool_name.bpf.c`，实现 BPF 逻辑。
-3. 新增 `tool_name.c`，实现用户态加载与输出。
-4. 运行 `make` 即可自动构建。
+- irq_stat：多行 JSON，每行为 `{"IRQ_NAME": count}` 或 `{"others": count}`。
+- disk_*：带单位后缀的 key，例如 `disk_write_vfs_total_us: 12.345`、`disk_write_vfs_count: 3`。
+- read_stat / write_stat / mmap_stat / tcp_connect / page_swap_stat：以进程为维度的行，例如 `PID_1234: 56`、`write_calls_pid_1234: 7`、`mmap_calls_pid_1234: 2`、`PID_123_comm: 9`。
+- socket_stat：协议族与进程两部分，示例 `Family_AF_INET: 10`、`PID_1234_comm: 5`。
 
-如果新增的是新的分类目录，需要同时在顶层 Makefile 中加入对应分类配置。
+建议：保持每行只包含一个易解析的数值项，输出行以 `key[:=] value` 或单行 JSON 字典结束。
 
-## 9. 结论
+## 各工具运行与实现要点（源码摘录后的摘要）
 
-`my_tools` 的设计思路是“按能力分模块、按职责分层次”，让 libbpf-bootstrap 下的观测工具能够以清晰、可维护、可扩展的方式演进。
+- `irq_stat` (`cpu/irq_stat.c`)
+  - 加载 `irq_stat.bpf.c` skeleton，附加 tracepoint 并每秒遍历 `irq_stats` map。
+  - 输出前 N 条（默认 5）为 JSON 行，超出项合并为 `{"others": N}`。
+
+- `disk_write_delay` / `disk_read_delay` (`disk/*.c`)
+  - 通过 kprobe 附加 `vfs_write` / `vfs_read` 以及 block 层相关函数，maps 聚合累计耗时与计数。
+  - 用户态每秒读取累加值并与上次快照差分，输出如 `disk_write_vfs_total_us`（浮点）与 `disk_write_vfs_count`（整数）。
+
+- `read_stat` / `write_stat` (`file/*.c`)
+  - BPF map 按 PID 计数，用户态遍历 map 并输出 `PID_<pid>: <count>` 或 `write_calls_pid_<pid>: <count>`。
+  - 用户态通常在读取后删除 map 中的键以实现增量统计。
+
+- `mmap_stat` / `page_fault_stat` / `page_swap_stat` (`memo/*.c`)
+  - `mmap_stat`：按 PID 输出增量 `mmap_calls_pid_<pid>` 并尝试将值清零以实现增量。
+  - `page_fault_stat`：以 `comm_pid: count` 格式输出并删除条目。
+  - `page_swap_stat`：保存本地 `prev_values[]` 快照，输出 `dr_pid_<pid>: <incremental_us>`。
+
+- `socket_stat` / `tcp_connect` (`network/*.c`)
+  - `socket_stat` 输出协议族统计 `Family_<NAME>: <count>` 以及 `PID_<pid>_<comm>: <count>`。
+  - `tcp_connect` 输出 `PID_<pid>_<comm>: <count>` 并在输出后删除 map 条目。
+
+## 集成注意事项与已识别问题
+
+- `client/main.py` 的 `parse_output_metrics()` 正则表达式匹配有限：它仅识别单个浮点或整数值行，或可解析为字典的 JSON 行。若你修改工具输出，务必保持兼容或同时更新 `client` 的解析逻辑（参见 [client/main.py](../../client/main.py#L1) 的 `parse_output_metrics` 实现）。
+- 若工具在用户态使用 `bpf_map__delete_elem()` 清理 map，`client` 若实时读取工具 stdout，应注意可能存在短时间内无数据的窗口。
+- `Makefile` 中将 `clang -target bpf` 与 `bpftool` 用于生成 skeletons；确保构建机器上已安装 `clang`、`bpftool` 和 `libbpf` 的开发头文件。
+
+## 文档已更新的变更点（相对于旧版）
+
+- 用源码实际的工具清单替换了旧版的通用描述，修正了 `bin/` 中存在的工具名称。
+- 明确说明了 `client` 的执行方式与 `parse_output_metrics` 的解析约束。
+- 为每个工具补充了输出示例与字段命名规则，方便前端解析与扩展。
+
+## 下一步建议
+
+- 为常用工具添加 `--help` 与 `--interval` 参数支持，并提供 `--json` 切换，便于 `client` 区分机器可读输出与人类可读日志。
+- 在 `client/main.py` 中增加对 `PID_*`、`write_calls_pid_*` 等更丰富键名的解析测试用例。
+- 编写短小的 `README` 片段并放置在每个工具源目录，说明用途与输出示例。
+
+如果你希望我现在：
+- 1) 将本次更新保存并提交为 patch（我可以生成 patch 并应用），或
+- 2) 先把变更草案以 PR 描述格式输出供你审阅，
+请回复你想要的下一步操作。 

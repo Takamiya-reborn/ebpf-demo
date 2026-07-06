@@ -23,16 +23,31 @@ RUN_LOG_DIR = PROJECT_ROOT / "run_logs"
 RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 TOOL_CONFIGS = {
-    "disk_write_delay": {"category": "latency", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
-    "disk_read_delay": {"category": "latency", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
-    "irq_stat": {"category": "execve", "chart_type": "pie", "x_axis": "进程名", "y_axis": "启动次数", "unit": "次"},   
-    "socket_stat": {"category": "network", "chart_type": "pie", "x_axis": "Socket类型/进程", "y_axis": "创建次数", "unit": "次"},
-    "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"},
+    # --- CPU 工具 ---
+    "irq_stat": {"category": "cpu", "chart_type": "pie", "x_axis": "进程名", "y_axis": "启动次数", "unit": "次"},
+    "cpu_run_delay": {"category": "cpu", "chart_type": "bar", "x_axis": "PID", "y_axis": "运行队列延迟", "unit": "us"},
+    "cpu_usage": {"category": "cpu", "chart_type": "bar", "x_axis": "PID/CPU", "y_axis": "CPU时间", "unit": "us"},
+    "cpu_freq_stat": {"category": "cpu", "chart_type": "bar", "x_axis": "CPU ID", "y_axis": "频率", "unit": "MHz"},
+    # --- Disk 工具 ---
+    "disk_write_delay": {"category": "disk", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
+    "disk_read_delay": {"category": "disk", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
+    "disk_io_size": {"category": "disk", "chart_type": "bar", "x_axis": "指标", "y_axis": "I/O大小/计数", "unit": "bytes"},
+    "disk_io_sched": {"category": "disk", "chart_type": "bar", "x_axis": "指标", "y_axis": "I/O调度延迟", "unit": "us"},
+    # --- File 工具 ---
     "read_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
-    "write_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
-    "mmap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
+    "write_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "写入次数", "unit": "次"},
+    "file_open_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "打开文件次数", "unit": "次"},
+    "file_fsync_stat": {"category": "file", "chart_type": "bar", "x_axis": "指标", "y_axis": "fsync延迟", "unit": "us"},
+    # --- Memory 工具 ---
+    "mmap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "mmap次数", "unit": "次"},
     "page_swap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "交换时长", "unit": "us"},
     "page_fault_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程_PID", "y_axis": "缺页中断次数", "unit": "次"},
+    "mem_oom_stat": {"category": "memo", "chart_type": "bar", "x_axis": "指标", "y_axis": "OOM次数", "unit": "次"},
+    # --- Network 工具 ---
+    "socket_stat": {"category": "network", "chart_type": "pie", "x_axis": "Socket类型/进程", "y_axis": "创建次数", "unit": "次"},
+    "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"},
+    "net_tcp_retransmit": {"category": "network", "chart_type": "bar", "x_axis": "PID/进程", "y_axis": "重传次数", "unit": "次"},
+    "net_udp_stat": {"category": "network", "chart_type": "bar", "x_axis": "PID", "y_axis": "UDP数据包/字节", "unit": "次/bytes"},
 }
 DEFAULT_CONFIG = {"category": "generic", "chart_type": "bar", "x_axis": "指标", "y_axis": "数值", "unit": ""}
 
