@@ -1,0 +1,20 @@
+name: cpu_run_delay
+compiled_code: /examples/cpu/cpu_run_delay.bpf.o
+metrics:
+  counters:
+    - name: run_delay
+      help: "Cumulative scheduler run queue delay per PID (ns)"
+      table: run_delay
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32
+    - name: wakeup_count
+      help: "Number of wakeup events per PID"
+      table: wakeup_count
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32

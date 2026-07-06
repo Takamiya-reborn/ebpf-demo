@@ -1,0 +1,20 @@
+name: cpu_usage
+compiled_code: /examples/cpu/cpu_usage.bpf.o
+metrics:
+  counters:
+    - name: cpu_time
+      help: "Cumulative on-CPU time per PID (ns)"
+      table: cpu_time
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32
+    - name: cpu_busy
+      help: "Per-CPU core busy time (ns)"
+      table: cpu_busy
+      labels:
+        - name: cpu_id
+          size: 4
+          decoders:
+            - name: uint32

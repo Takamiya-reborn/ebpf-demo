@@ -1,0 +1,21 @@
+name: disk_io_size
+compiled_code: /examples/disk/disk_io_size.bpf.o
+metrics:
+  counters:
+    - name: io_size_stats
+      help: "Disk I/O size stats. Index: 0=read_bytes, 1=write_bytes, 2=read_count, 3=write_count, 4=total_bytes, 5=total_count"
+      table: io_size_stats
+      labels:
+        - name: op_index
+          size: 4
+          decoders:
+            - name: uint32
+    - name: pid_io_stats
+      help: "Per-PID I/O bytes (read_bytes, write_bytes, read_count, write_count)"
+      table: pid_io_stats
+      labels:
+        - name: pid
+          size: 4
+          decoders:
+            - name: uint32
+      value: read_bytes

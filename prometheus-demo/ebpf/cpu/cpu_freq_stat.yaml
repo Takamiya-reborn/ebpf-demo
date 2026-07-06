@@ -1,0 +1,13 @@
+name: cpu_freq_stat
+compiled_code: /examples/cpu/cpu_freq_stat.bpf.o
+metrics:
+  counters:
+    - name: cpu_freq_map
+      help: "CPU frequency statistics per core (cur_freq kHz, total_freq, count)"
+      table: cpu_freq_map
+      labels:
+        - name: cpu_id
+          size: 4
+          decoders:
+            - name: uint32
+      value: cur_freq
