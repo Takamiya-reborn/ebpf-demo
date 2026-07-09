@@ -43,6 +43,79 @@
 - `net_tcp_retransmit` — TCP 重传事件追踪（按 PID 和进程名，网络稳定性关键指标）
 - `net_udp_stat` — UDP 发送/接收统计（按 PID，含字节数）
 
+## 系统功能图
+
+下面的 Mermaid 图展示 `my_tools` 中 20 个小工具按功能模块分类的关系。
+
+```mermaid
+flowchart LR
+  subgraph CPU [CPU 性能观测]
+    irq_stat["irq_stat\n中断统计"]
+    cpu_run_delay["cpu_run_delay\n调度延迟"]
+    cpu_usage["cpu_usage\nCPU 使用"]
+    cpu_freq_stat["cpu_freq_stat\nCPU 频率"]
+  end
+
+  subgraph Disk [磁盘性能观测]
+    disk_read_delay["disk_read_delay\n读取延迟"]
+    disk_write_delay["disk_write_delay\n写入延迟"]
+    disk_io_size["disk_io_size\nI/O 大小分布"]
+    disk_io_sched["disk_io_sched\n调度延迟"]
+  end
+
+  subgraph File [文件系统观测]
+    read_stat["read_stat\nread() 统计"]
+    write_stat["write_stat\nwrite() 统计"]
+    file_open_stat["file_open_stat\nopen() 统计"]
+    file_fsync_stat["file_fsync_stat\nfsync 延迟"]
+  end
+
+  subgraph Memory [内存与页表]
+    mmap_stat["mmap_stat\nmmap() 统计"]
+    page_fault_stat["page_fault_stat\n缺页中断"]
+    page_swap_stat["page_swap_stat\n页面回收延迟"]
+    mem_oom_stat["mem_oom_stat\nOOM 事件追踪"]
+  end
+
+  subgraph Network [网络观测]
+    socket_stat["socket_stat\nsocket() 统计"]
+    tcp_connect["tcp_connect\nTCP 连接统计"]
+    net_tcp_retransmit["net_tcp_retransmit\nTCP 重传"]
+    net_udp_stat["net_udp_stat\nUDP 统计"]
+  end
+
+  CPU --> Disk
+  CPU --> File
+  CPU --> Memory
+  CPU --> Network
+  Disk --> File
+  File --> Memory
+  Memory --> Network
+```
+
+### 20 个小工具名称与功能说明
+
+- `irq_stat`：统计系统中断事件次数，帮助分析 CPU 中断处理负载。
+- `cpu_run_delay`：监控进程从唤醒到真正上 CPU 的延迟，定位调度器延迟和高负载时的调度问题。
+- `cpu_usage`：统计进程和线程的 CPU 使用时间，按 PID 和 CPU 核心区分负载分布。
+- `cpu_freq_stat`：监视每个 CPU 核心频率变化，评估动态频率调度与功耗调优效果。
+- `disk_read_delay`：监测磁盘读取操作延迟，覆盖 VFS 和 block 层，帮助发现 I/O 瓶颈。
+- `disk_write_delay`：监测磁盘写入操作延迟，覆盖 VFS 和 block 层，分析写入性能问题。
+- `disk_io_size`：统计块设备 I/O 请求大小分布，判断是否存在小包 I/O 或大块请求异常。
+- `disk_io_sched`：跟踪块设备 I/O 的调度与完成延迟，反映 I/O 调度器性能。
+- `read_stat`：统计 `read()` 系统调用次数，按进程输出增量统计，便于文件读取热点分析。
+- `write_stat`：统计 `write()` 系统调用次数，按进程输出增量统计，便于写入压力分析。
+- `file_open_stat`：统计文件打开次数与失败情况，按进程和进程名分类，诊断频繁打开文件的问题。
+- `file_fsync_stat`：统计 `fsync()` / `fdatasync()` 等同步刷盘操作的延迟，定位持久化性能问题。
+- `mmap_stat`：统计 `mmap()` 调用行为，分析内存映射使用情况与频繁映射问题。
+- `page_fault_stat`：统计缺页中断次数，按用户态和内核态区分进程内存访问异常情况。
+- `page_swap_stat`：监测页面回收或交换延迟，帮助定位内存压力下的页面置换问题。
+- `mem_oom_stat`：追踪 OOM Killer 事件和相关进程，分析内存耗尽时的进程终止情况。
+- `socket_stat`：统计 `socket()` 系统调用按协议族与进程的使用，分析网络套接字分布。
+- `tcp_connect`：统计 TCP 建立连接请求，按 PID 和进程名分类，便于识别连接热点和失败趋势。
+- `net_tcp_retransmit`：追踪 TCP 重传事件，评估网络可靠性和拥塞状况。
+- `net_udp_stat`：统计 UDP 发送与接收数据量，按进程分类，分析无连接协议流量。
+
 ## 构建与运行
 
 在 `my_tools` 根目录执行：
@@ -101,26 +174,3 @@ client 使用 `parse_output_metrics()` 对工具输出做解析，支持两类�
 - `socket_stat` / `tcp_connect` (`network/*.c`)
   - `socket_stat` 输出协议族统计 `Family_<NAME>: <count>` 以及 `PID_<pid>_<comm>: <count>`。
   - `tcp_connect` 输出 `PID_<pid>_<comm>: <count>` 并在输出后删除 map 条目。
-
-## 集成注意事项与已识别问题
-
-- `client/main.py` 的 `parse_output_metrics()` 正则表达式匹配有限：它仅识别单个浮点或整数值行，或可解析为字典的 JSON 行。若你修改工具输出，务必保持兼容或同时更新 `client` 的解析逻辑（参见 [client/main.py](../../client/main.py#L1) 的 `parse_output_metrics` 实现）。
-- 若工具在用户态使用 `bpf_map__delete_elem()` 清理 map，`client` 若实时读取工具 stdout，应注意可能存在短时间内无数据的窗口。
-- `Makefile` 中将 `clang -target bpf` 与 `bpftool` 用于生成 skeletons；确保构建机器上已安装 `clang`、`bpftool` 和 `libbpf` 的开发头文件。
-
-## 文档已更新的变更点（相对于旧版）
-
-- 用源码实际的工具清单替换了旧版的通用描述，修正了 `bin/` 中存在的工具名称。
-- 明确说明了 `client` 的执行方式与 `parse_output_metrics` 的解析约束。
-- 为每个工具补充了输出示例与字段命名规则，方便前端解析与扩展。
-
-## 下一步建议
-
-- 为常用工具添加 `--help` 与 `--interval` 参数支持，并提供 `--json` 切换，便于 `client` 区分机器可读输出与人类可读日志。
-- 在 `client/main.py` 中增加对 `PID_*`、`write_calls_pid_*` 等更丰富键名的解析测试用例。
-- 编写短小的 `README` 片段并放置在每个工具源目录，说明用途与输出示例。
-
-如果你希望我现在：
-- 1) 将本次更新保存并提交为 patch（我可以生成 patch 并应用），或
-- 2) 先把变更草案以 PR 描述格式输出供你审阅，
-请回复你想要的下一步操作。 
