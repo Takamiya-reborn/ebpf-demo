@@ -1,492 +1,114 @@
-# libbpf-bootstrap: demo BPF applications
+# bpf-demo
 
-[![Github Actions](https://github.com/libbpf/libbpf-bootstrap/actions/workflows/build.yml/badge.svg)](https://github.com/libbpf/libbpf-bootstrap/actions/workflows/build.yml)
-[![Github Actions](https://github.com/libbpf/libbpf-bootstrap/actions/workflows/build-android.yml/badge.svg)](https://github.com/libbpf/libbpf-bootstrap/actions/workflows/build-android.yml)
+基于 [libbpf-bootstrap](https://github.com/libbpf/libbpf-bootstrap) 的 eBPF 学习与性能观测项目。仓库包含上游示例、面向 CPU/磁盘/文件/内存/网络的自定义 eBPF 工具，以及一个可选的 Web 控制台和 Prometheus 监控环境。
 
-Make sure you have cloned this repo using `--recurse-submodules` and installed the dependencies 
-before you try to build the examples.  See [Building](#Building) for details.
+## 项目组成
 
-## minimal
+- `examples/`：libbpf-bootstrap 自带的 C/Rust 示例，用于学习 CO-RE、tracepoint、kprobe、fentry、uprobe、USDT、XDP 等用法。
+- `my_tools/`：自定义性能观测工具。每个工具通常由用户态程序 `*.c` 和 BPF 程序 `*.bpf.c` 组成。
+  - `cpu/`：CPU 使用率、频率、中断和运行队列延迟
+  - `disk/`：磁盘 I/O 大小、调度及读写延迟
+  - `file/`：文件打开、读写和 `fsync` 统计
+  - `memo/`：内存映射、缺页、换页和 OOM 统计
+  - `network/`：Socket、TCP 连接、UDP 流量和 TCP 重传统计
+- `client/`：FastAPI Web 控制台。动态发现 `my_tools/bin/` 中的可执行文件，通过 SSE 实时显示工具输出，并对数值结果做摘要和图表展示；工具的图表和分类配置维护在 `client/config/tool_configs.json`。
+- `prometheus-demo/`：Docker Compose 监控环境，组合 Prometheus、Grafana、Node Exporter 和 Cloudflare eBPF Exporter。
+- `run_logs/`：本地运行产生的历史日志目录，不属于源码，已加入 Git 忽略规则。
 
-`minimal` is just that – a minimal practical BPF application example. It
-doesn't use or require BPF CO-RE, so should run on quite old kernels. It
-installs a tracepoint handler which is triggered once every second. It uses
-`bpf_printk()` BPF helper to communicate with the world. To see it's output,
-read `/sys/kernel/debug/tracing/trace_pipe` file as a root:
+## 环境要求
 
-```shell
-$ cd examples/c
-$ make minimal
-$ sudo ./minimal
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-           <...>-3840345 [010] d... 3220701.101143: bpf_trace_printk: BPF triggered from PID 3840345.
-           <...>-3840345 [010] d... 3220702.101265: bpf_trace_printk: BPF triggered from PID 3840345.
+建议在 Linux 主机上运行 eBPF 工具。需要准备：
+
+- 支持目标 eBPF 特性的 Linux 内核，并能访问 `/sys/kernel/debug`；
+- `clang`、`llvm`、`bpftool`、`gcc`、`make`；
+- `libelf`、`zlib`、`libbpf` 的构建依赖；
+- 运行工具通常需要 root 权限，或配置 `sudo -n` 免交互执行；
+- 使用 Web 控制台需要 Python 3.12+ 和 `uv`；
+- 使用监控演示需要 Docker Compose。
+
+Windows/WSL 仅适合作为开发环境；真正加载 eBPF 程序时，应确认 Linux 内核、权限和调试文件系统可用。
+
+## 构建自定义工具
+
+在仓库根目录执行：
+
+```bash
+cd my_tools
+make
 ```
 
-`minimal` is great as a bare-bones experimental playground to quickly try out
-new ideas or BPF features.
+构建产物位于 `my_tools/bin/`，中间文件位于 `my_tools/.output/`。按类别构建或清理：
 
-## minimal_ns
-
-`minimal_ns` is as same as `minimal` but for namespaced environments.
-`minimal` would not work in environments that have namespace, like containers,
-or WSL2, because the perceived pid of the process in the namespace is not the
-actual pid of the process. For executing `minimal` in namespaced environments
-you need to use `minimal_ns` instead.
-
-```shell
-$ cd examples/c
-$ make minimal_ns
-$ sudo ./minimal_ns
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-           <...>-3840345 [022] d...1  8804.331204: bpf_trace_printk: BPF triggered from PID 9087.
-           <...>-3840345 [022] d...1  8804.331215: bpf_trace_printk: BPF triggered from PID 9087.
+```bash
+make cpu
+make network
+make clean
 ```
 
-## minimal_Legacy
+运行单个工具时使用生成的可执行文件，例如：
 
-This version of `minimal` is modified to allow running on even older kernels
-that do not allow global variables. bpf_printk uses global variables unless
-BPF_NO_GLOBAL_DATA is defined before including bpf_helpers.h. Additionally,
-the global variable my_pid has been replaced with an array of one element to
-hold the process pid.
-
-```
-$ cd examples/c
-$ make minimal_legacy
-$ sudo ./minimal_legacy
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-  minimal_legacy-52030 [001] .... 491227.784078: 0x00000001: BPF triggered from PID 52030.
-  minimal_legacy-52030 [001] .... 491228.840571: 0x00000001: BPF triggered from PID 52030.
-  minimal_legacy-52030 [001] .... 491229.841643: 0x00000001: BPF triggered from PID 52030.
-  minimal_legacy-52030 [001] .... 491230.842432: 0x00000001: BPF triggered from PID 52030.
+```bash
+sudo ./my_tools/bin/cpu_usage
+sudo ./my_tools/bin/tcp_connect
 ```
 
-## bootstrap
+具体输出格式和事件字段以对应目录中的 `*.c`、`*.bpf.c` 实现为准。
 
-`bootstrap` is an example of a simple (but realistic) BPF application. It
-tracks process starts (`exec()` family of syscalls, to be precise) and exits
-and emits data about filename, PID and parent PID, as well as exit status and
-duration of the process life. With `-d <min-duration-ms>` you can specify
-minimum duration of the process to log. In such mode process start
-(technically, `exec()`) events are not output (see example output below).
+## 启动 Web 控制台
 
-`bootstrap` was created in the similar spirit as
-[libbpf-tools](https://github.com/iovisor/bcc/tree/master/libbpf-tools) from
-BCC package, but is designed to be more stand-alone and with simpler Makefile
-to simplify adoption to user's particular needs. It demonstrates the use of
-typical BPF features:
-  - cooperating BPF programs (tracepoint handlers for process `exec` and `exit`
-    events, in this particular case);
-  - BPF map for maintaining the state;
-  - BPF ring buffer for sending data to user-space;
-  - global variables for application behavior parameterization.
-  - it utilizes BPF CO-RE and vmlinux.h to read extra process information from
-    kernel's `struct task_struct`.
+先完成 `my_tools` 构建，再安装客户端依赖并启动服务：
 
-`bootstrap` is intended to be the starting point for your own BPF application,
-with things like BPF CO-RE and vmlinux.h, consuming BPF ring buffer data,
-command line arguments parsing, graceful Ctrl-C handling, etc. all taken care
-of for you, which are crucial but mundane tasks that are no fun, but necessary
-to be able to do anything useful. Just copy/paste and do simple renaming to get
-yourself started.
-
-Here's an example output in minimum process duration mode:
-
-```shell
-$ sudo ./bootstrap -d 50
-TIME     EVENT COMM             PID     PPID    FILENAME/EXIT CODE
-19:18:32 EXIT  timeout          3817109 402466  [0] (126ms)
-19:18:32 EXIT  sudo             3817117 3817111 [0] (259ms)
-19:18:32 EXIT  timeout          3817110 402466  [0] (264ms)
-19:18:33 EXIT  python3.7        3817083 1       [0] (1026ms)
-19:18:38 EXIT  python3          3817429 3817424 [1] (60ms)
-19:18:38 EXIT  sh               3817424 3817420 [0] (79ms)
-19:18:38 EXIT  timeout          3817420 402466  [0] (80ms)
-19:18:43 EXIT  timeout          3817610 402466  [0] (70ms)
-19:18:43 EXIT  grep             3817619 3817617 [1] (271ms)
-19:18:43 EXIT  timeout          3817609 402466  [0] (321ms)
-19:18:44 EXIT  iostat           3817585 3817531 [0] (3006ms)
-19:18:44 EXIT  tee              3817587 3817531 [0] (3005ms)
-...
+```bash
+cd client
+uv sync
+uv run main.py(默认监听所有端口，访问本机使用localhost:8000)
 ```
 
-## bootstrap_legacy
+访问 <http://127.0.0.1:8000/>。控制台会扫描 `my_tools/bin/`，通过 `sudo -n` 启动选中的工具，默认采集 10 秒，并在页面中实时显示 stdout/stderr。
 
-`bootstrap_legacy` is a version of `bootstrap` modified to run on older kernels that do not support BPF ring buffer maps (BPF_MAP_TYPE_RINGBUF) introduced in kernel 5.8. `bootstrap_legacy` replaces the ring buffer maps with perf event array (BPF_MAP_TYPE_PERF_EVENT_ARRAY) for compatibility with older kernel versions.
+客户端还提供：
 
-```shell
-$ cd examples/c
-$ make bootstrap_legacy
-$ sudo ./bootstrap_legacy
-TIME     EVENT COMM             PID     PPID    FILENAME/EXIT CODE
-10:26:32 EXEC  sh               4101543 4054526 /bin/sh
-10:26:32 EXEC  python           4101545 4101543 /usr/bin/python
-10:26:32 EXIT  python           4101545 4101543 [0] (9ms)
-10:26:32 EXIT  sh               4101543 4054526 [0] (10ms)
-...
+- `GET /api/tools`：列出可用工具；
+- `GET /run/stream/{tool_name}?duration=10`：以 SSE 流式执行工具；
+- 当前版本的 Prometheus 指标主要由 `prometheus-demo` 中的 Prometheus 和 eBPF Exporter 采集；客户端本身暂未注册 `/metrics` 路由。
+
+工具输出会保存在内存中用于当前请求的解析和摘要，不会由当前客户端自动写入 `run_logs/`。
+
+## 启动 Prometheus 监控环境
+
+```bash
+cd prometheus-demo
+docker compose up -d
+docker compose ps
 ```
 
-## uprobe
+默认地址：
 
-`uprobe` is an example of dealing with user-space entry and exit (return) probes,
-`uprobe` and `uretprobe`, in libbpf lingo. It attaches `uprobe` and `uretprobe`
-BPF programs to its own functions (`uprobed_add()` and `uprobed_sub()`) and logs input arguments
-and return result, respectively, using `bpf_printk()` macro. The user-space
-function is triggered once every second:
+- Prometheus：<http://127.0.0.1:9091>
+- Grafana：<http://127.0.0.1:3000>
+- Node Exporter：<http://127.0.0.1:9100/metrics>
+- eBPF Exporter：<http://127.0.0.1:9435/metrics>
 
-```shell
-$ sudo ./uprobe
-libbpf: loading object 'uprobe_bpf' from buffer
-...
-Successfully started!
-...........
+停止服务：
+
+```bash
+docker compose down
 ```
 
-You can see `uprobe` demo output in `/sys/kernel/debug/tracing/trace_pipe`:
-```shell
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-          uprobe-1809291 [007] .... 4017233.106596: 0: uprobed_add ENTRY: a = 0, b = 1
-          uprobe-1809291 [007] .... 4017233.106605: 0: uprobed_add EXIT: return = 1
-          uprobe-1809291 [007] .... 4017233.106606: 0: uprobed_sub ENTRY: a = 0, b = 0
-          uprobe-1809291 [007] .... 4017233.106607: 0: uprobed_sub EXIT: return = 0
-          uprobe-1809291 [007] .... 4017234.106694: 0: uprobed_add ENTRY: a = 1, b = 2
-          uprobe-1809291 [007] .... 4017234.106697: 0: uprobed_add EXIT: return = 3
-          uprobe-1809291 [007] .... 4017234.106700: 0: uprobed_sub ENTRY: a = 1, b = 1
-          uprobe-1809291 [007] .... 4017234.106701: 0: uprobed_sub EXIT: return = 0
+`prometheus-demo/ebpf/` 中的 YAML 是 eBPF Exporter 配置；启用哪些配置由 `docker-compose.yml` 中 `--config.names` 决定。eBPF Exporter 使用特权容器并挂载 `/sys/kernel/debug`，请只在可信的本地环境中使用。
+
+## 日志与 Git
+
+`run_logs/` 是运行结果，不是可复现的源码或测试夹具。它可能包含大量、与机器环境相关的文件，因此不应提交到 Git。当前仓库已通过 `.gitignore` 忽略该目录；客户端也不再创建未使用的持久化日志目录。网页中的“实时输出日志”仍然是请求期间的内存数据，不等同于文件日志。
+
+如需临时保存一次运行结果，建议显式重定向到仓库外或本地临时目录：
+
+```bash
+sudo ./my_tools/bin/disk_read_delay > /tmp/disk_read_delay.log 2>&1
 ```
 
-## usdt
-
-`usdt` is an example of dealing with USDT probe. It attaches USDT BPF programs to
-the [libc:setjmp](https://www.gnu.org/software/libc/manual/html_node/Non_002dlocal-Goto-Probes.html) probe, which is triggered by calling `setjmp` in user-space program once per second and logs USDT arguments using `bpf_printk()` macro:
-
-```shell
-$ sudo ./usdt
-libbpf: loading object 'usdt_bpf' from buffer
-...
-Successfully started!
-...........
-```
-
-You can see `usdt` demo output in `/sys/kernel/debug/tracing/trace_pipe`:
-```shell
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-            usdt-1919077 [005] d..21 537310.886092: bpf_trace_printk: USDT auto attach to libc:setjmp: arg1 = 55d03d6a42a0, arg2 = 0, arg3 = 55d03d65e54e
-            usdt-1919077 [005] d..21 537310.886105: bpf_trace_printk: USDT manual attach to libc:setjmp: arg1 = 55d03d6a42a0, arg2 = 0, arg3 = 55d03d65e54e
-            usdt-1919077 [005] d..21 537311.886214: bpf_trace_printk: USDT auto attach to libc:setjmp: arg1 = 55d03d6a42a0, arg2 = 0, arg3 = 55d03d65e54e
-            usdt-1919077 [005] d..21 537311.886227: bpf_trace_printk: USDT manual attach to libc:setjmp: arg1 = 55d03d6a42a0, arg2 = 0, arg3 = 55d03d65e54e
-```
-
-## fentry
-
-`fentry` is an example that uses fentry and fexit BPF programs for tracing. It
-attaches `fentry` and `fexit` traces to `do_unlinkat()` which is called when a
-file is deleted and logs the return value, PID, and filename to the
-trace pipe.
-
-Important differences, compared to kprobes, are improved performance and
-usability. In this example, better usability is shown with the ability to
-directly dereference pointer arguments, like in normal C, instead of using
-various read helpers. The big distinction between **fexit** and **kretprobe**
-programs is that fexit one has access to both input arguments and returned
-result, while kretprobe can only access the result.
-
-fentry and fexit programs are available starting from 5.5 kernels.
-
-```shell
-$ sudo ./fentry
-libbpf: loading object 'fentry_bpf' from buffer
-...
-Successfully started!
-..........
-```
-
-The `fentry` output in `/sys/kernel/debug/tracing/trace_pipe` should look
-something like this:
-
-```shell
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-              rm-9290    [004] d..2  4637.798698: bpf_trace_printk: fentry: pid = 9290, filename = test_file
-              rm-9290    [004] d..2  4637.798843: bpf_trace_printk: fexit: pid = 9290, filename = test_file, ret = 0
-              rm-9290    [004] d..2  4637.798698: bpf_trace_printk: fentry: pid = 9290, filename = test_file2
-              rm-9290    [004] d..2  4637.798843: bpf_trace_printk: fexit: pid = 9290, filename = test_file2, ret = 0
-```
-
-## kprobe
-
-`kprobe` is an example of dealing with kernel-space entry and exit (return)
-probes, `kprobe` and `kretprobe`, in libbpf lingo. It attaches `kprobe` and
-`kretprobe` BPF programs to the `do_unlinkat()` function and logs the PID,
-filename, and return result, respectively, using `bpf_printk()` macro.
-
-```shell
-$ sudo ./kprobe
-libbpf: loading object 'kprobe_bpf' from buffer
-...
-Successfully started!
-...........
-```
-
-The `kprobe` demo output in `/sys/kernel/debug/tracing/trace_pipe` should look
-something like this:
-
-```shell
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-              rm-9346    [005] d..3  4710.951696: bpf_trace_printk: KPROBE ENTRY pid = 9346, filename = test1
-              rm-9346    [005] d..4  4710.951819: bpf_trace_printk: KPROBE EXIT: ret = 0
-              rm-9346    [005] d..3  4710.951852: bpf_trace_printk: KPROBE ENTRY pid = 9346, filename = test2
-              rm-9346    [005] d..4  4710.951895: bpf_trace_printk: KPROBE EXIT: ret = 0
-```
-
-## xdp
-
-`xdp` is an example written in Rust (using libbpf-rs). It attaches to
-the ingress path of networking device and logs the size of each packet,
-returning `XDP_PASS` to allow the packet to be passed up to the kernel’s
-networking stack.
-
-```shell
-$ sudo ./target/release/xdp 1
-..........
-```
-
-The `xdp` output in `/sys/kernel/debug/tracing/trace_pipe` should look
-something like this:
-
-```shell
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-           <...>-823887  [000] d.s1 602386.079100: bpf_trace_printk: packet size: 75
-           <...>-823887  [000] d.s1 602386.079141: bpf_trace_printk: packet size: 66
-           <...>-2813507 [000] d.s1 602386.696702: bpf_trace_printk: packet size: 77
-           <...>-2813507 [000] d.s1 602386.696735: bpf_trace_printk: packet size: 66
-```
-
-## tc
-
-`tc` (short for Traffic Control) is an example of handling ingress network traffics.
-It creates a qdisc on the `lo` interface and attaches the `tc_ingress` BPF program to it.
-It reports the metadata of the IP packets that coming into the `lo` interface.
-
-```shell
-$ sudo ./tc
-...
-Successfully started! Please run `sudo cat /sys/kernel/debug/tracing/trace_pipe` to see output of the BPF program.
-......
-```
-
-The `tc` output in `/sys/kernel/debug/tracing/trace_pipe` should look
-something like this:
-
-```
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-            node-1254811 [007] ..s1 8737831.671074: 0: Got IP packet: tot_len: 79, ttl: 64
-            sshd-1254728 [006] ..s1 8737831.674334: 0: Got IP packet: tot_len: 79, ttl: 64
-            sshd-1254728 [006] ..s1 8737831.674349: 0: Got IP packet: tot_len: 72, ttl: 64
-            node-1254811 [007] ..s1 8737831.674550: 0: Got IP packet: tot_len: 71, ttl: 64
-```
-
-## profile
-
-`profile` is an example written in Rust and C using the
-[`blazesym`](https://github.com/libbpf/blazesym) symbolization library. It
-attaches to perf events, sampling on every processor periodically. It
-shows addresses, symbols, file names, and line numbers of stacktraces (if
-available).
-
-```shell
-$ sudo ./target/release/profile
-COMM: swapper/2 (pid=0) @ CPU 2
-Kernel:
-0xffffffffb59141f8: mwait_idle_with_hints.constprop.0 @ 0xffffffffb59141b0+0x48
-0xffffffffb5f731ce: intel_idle @ 0xffffffffb5f731b0+0x1e
-0xffffffffb5c7bf09: cpuidle_enter_state @ 0xffffffffb5c7be80+0x89
-0xffffffffb5c7c309: cpuidle_enter @ 0xffffffffb5c7c2e0+0x29
-0xffffffffb516f57c: do_idle @ 0xffffffffb516f370+0x20c
-0xffffffffb516f829: cpu_startup_entry @ 0xffffffffb516f810+0x19
-0xffffffffb5075bfa: start_secondary @ 0xffffffffb5075ae0+0x11a
-0xffffffffb500015a: secondary_startup_64_no_verify @ 0xffffffffb5000075+0xe5
-No Userspace Stack
-```
-
-C version and Rust version show the same content. Both of them use `blazesym`
-to symbolize stacktraces.
-
-## sockfilter
-
-`sockfilter` is an example of monitoring packet and dealing with `__sk_buff`
-structure. It attaches `socket` BPF program to `sock_queue_rcv_skb()` function
-and retrieve information from `BPF_MAP_TYPE_RINGBUF`, then print
-protocol, src IP, src port, dst IP, dst port in standard output.
-Currently, most of the IPv4 protocols defined in `uapi/linux/in.h` are included,
-please check `ipproto_mapping` of `examples/c/sockfilter.c` for the supported protocols.
-
-```shell
-$ sudo ./sockfilter -i <interface>
-interface:lo    protocol: UDP   127.0.0.1:51845(src) -> 127.0.0.1:53(dst)
-interface:lo    protocol: UDP   127.0.0.1:41552(src) -> 127.0.0.1:53(dst)
-```
-
-## task_iter
-
-`task_iter` is an example of using [BPF Iterators](https://docs.kernel.org/bpf/bpf_iterators.html). 
-This example iterates over all tasks on the host and gets their pid, process name, 
-kernel stack, and their state. The user can provide a pid as first argument to the executable. This will filter out all
-tasks not belonging to a particular process. Note: you can use BlazeSym to symbolize the kernel stacktraces
-(like in `profile`) but that code is omitted for simplicity.
-
-```shell
-$ sudo ./task_iter
-Task Info. Pid: 3647645. Process Name: TTLSFWorker59. Kernel Stack Len: 3. State: INTERRUPTIBLE
-Task Info. Pid: 1600495. Process Name: tmux: client. Kernel Stack Len: 6. State: INTERRUPTIBLE
-Task Info. Pid: 1600497. Process Name: tmux: server. Kernel Stack Len: 0. State: RUNNING
-Task Info. Pid: 1600498. Process Name: bash. Kernel Stack Len: 5. State: INTERRUPTIBLE
-```
-
-## lsm
-`lsm` serves as an illustrative example of utilizing [LSM BPF](https://docs.kernel.org/bpf/prog_lsm.html). In this example, the `bpf()` system call is effectively blocked. Once the `lsm` program is operational, its successful execution can be confirmed by using the `bpftool prog list` command.
-
-```shell
-$ sudo ./lsm
-libbpf: loading object 'lsm_bpf' from buffer
-...
-Successfully started! Please run `sudo cat /sys/kernel/debug/tracing/trace_pipe` to see output of the BPF programs.
-..........
-```
-
-The output from `lsm` in `/sys/kernel/debug/tracing/trace_pipe` is expected to resemble the following:
-
-````shell
-$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-         bpftool-70646   [002] ...11 279318.416393: bpf_trace_printk: LSM: block bpf() worked
-         bpftool-70646   [002] ...11 279318.416532: bpf_trace_printk: LSM: block bpf() worked
-         bpftool-70646   [002] ...11 279318.416533: bpf_trace_printk: LSM: block bpf() worked
-````
-
-When the `bpf()` system call gets blocked, the `bpftool prog list` command yields the following output:
-
-```shell
-$ sudo bpftool prog list
-Error: can't get next program: Operation not permitted
-```
-
-# Building
-
-libbpf-bootstrap supports multiple build systems that do the same thing.
-This serves as a cross reference for folks coming from different backgrounds.
-
-## Install Dependencies
-
-You will need `clang` (at least v11 or later), `libelf` and `zlib` to build
-the examples, package names may vary across distros.
-
-On Ubuntu/Debian, you need:
-```shell
-$ apt install clang libelf1 libelf-dev zlib1g-dev
-```
-
-On CentOS/Fedora, you need:
-```shell
-$ dnf install clang elfutils-libelf elfutils-libelf-devel zlib-devel
-```
-## Getting the source code
-
-Download the git repository and check out submodules:
-```shell
-$ git clone --recurse-submodules https://github.com/libbpf/libbpf-bootstrap
-```
-
-## C Examples
-
-Makefile build:
-
-```shell
-$ git submodule update --init --recursive       # check out libbpf
-$ cd examples/c
-$ make
-$ sudo ./bootstrap
-TIME     EVENT COMM             PID     PPID    FILENAME/EXIT CODE
-00:21:22 EXIT  python3.8        4032353 4032352 [0] (123ms)
-00:21:22 EXEC  mkdir            4032379 4032337 /usr/bin/mkdir
-00:21:22 EXIT  mkdir            4032379 4032337 [0] (1ms)
-00:21:22 EXEC  basename         4032382 4032381 /usr/bin/basename
-00:21:22 EXIT  basename         4032382 4032381 [0] (0ms)
-00:21:22 EXEC  sh               4032381 4032380 /bin/sh
-00:21:22 EXEC  dirname          4032384 4032381 /usr/bin/dirname
-00:21:22 EXIT  dirname          4032384 4032381 [0] (1ms)
-00:21:22 EXEC  readlink         4032387 4032386 /usr/bin/readlink
-^C
-```
-
-CMake build:
-
-```shell
-$ git submodule update --init --recursive       # check out libbpf
-$ mkdir build && cd build
-$ cmake ../examples/c
-$ make
-$ sudo ./bootstrap
-<...>
-```
-
-XMake build (Linux):
-
-```shell
-$ git submodule update --init --recursive       # check out libbpf
-$ cd examples/c
-$ xmake
-$ xmake run bootstrap
-```
-
-XMake build (Android):
-
-```shell
-$ git submodule update --init --recursive       # check out libbpf
-$ cd examples/c
-$ xmake f -p android
-$ xmake
-```
-
-Install [Xmake](https://github.com/xmake-io/xmake)
-
-```shell
-$ bash <(wget https://xmake.io/shget.text -O -)
-$ source ~/.xmake/profile
-```
-
-## Rust Examples
-
-Install `libbpf-cargo`:
-```shell
-$ cargo install libbpf-cargo
-```
-
-Build using `cargo`:
-```shell
-$ cd examples/rust
-$ cargo build --release
-$ sudo ./target/release/xdp 1
-<...>
-```
-
-# Troubleshooting
-
-Libbpf debug logs are quire helpful to pinpoint the exact source of problems,
-so it's usually a good idea to look at them before starting to debug or
-posting question online.
-
-`./minimal` is always running with libbpf debug logs turned on.
-
-For `./bootstrap`, run it in verbose mode (`-v`) to see libbpf debug logs:
-
-```shell
-$ sudo ./bootstrap -v
-libbpf: loading object 'bootstrap_bpf' from buffer
-libbpf: elf: section(2) tp/sched/sched_process_exec, size 384, link 0, flags 6, type=1
-libbpf: sec 'tp/sched/sched_process_exec': found program 'handle_exec' at insn offset 0 (0 bytes), code size 48 insns (384 bytes)
-libbpf: elf: section(3) tp/sched/sched_process_exit, size 432, link 0, flags 6, type=1
-libbpf: sec 'tp/sched/sched_process_exit': found program 'handle_exit' at insn offset 0 (0 bytes), code size 54 insns (432 bytes)
-libbpf: elf: section(4) license, size 13, link 0, flags 3, type=1
-libbpf: license of bootstrap_bpf is Dual BSD/GPL
-...
-```
+## 相关文档
+
+ - [上游 libbpf-bootstrap 示例说明](README-upstream.md)
+- [Web 客户端说明](client/README.md)
+- [Prometheus Demo 说明](prometheus-demo/README.md)
