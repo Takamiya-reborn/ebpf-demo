@@ -13,56 +13,56 @@ from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 from jinja2 import Environment, FileSystemLoader
 from prometheus_client import (
-    CollectorRegistry, Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
 )
 
 # --- 配置与初始化 ---
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CLIENT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = CLIENT_ROOT.parent
 TOOL_BIN_DIR = PROJECT_ROOT / "my_tools" / "bin"
-RUN_LOG_DIR = PROJECT_ROOT / "run_logs"
-RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_PATH = CLIENT_ROOT / "config" / "tool_configs.json"
 
-TOOL_CONFIGS = {
-    # --- CPU 工具 ---
-    "irq_stat": {"category": "cpu", "chart_type": "pie", "x_axis": "进程名", "y_axis": "启动次数", "unit": "次"},
-    "cpu_run_delay": {"category": "cpu", "chart_type": "bar", "x_axis": "PID", "y_axis": "运行队列延迟", "unit": "us"},
-    "cpu_usage": {"category": "cpu", "chart_type": "bar", "x_axis": "PID/CPU", "y_axis": "CPU时间", "unit": "us"},
-    "cpu_freq_stat": {"category": "cpu", "chart_type": "bar", "x_axis": "CPU ID", "y_axis": "频率", "unit": "MHz"},
-    # --- Disk 工具 ---
-    "disk_write_delay": {"category": "disk", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
-    "disk_read_delay": {"category": "disk", "chart_type": "bar", "x_axis": "操作阶段", "y_axis": "延迟", "unit": "us"},
-    "disk_io_size": {"category": "disk", "chart_type": "bar", "x_axis": "指标", "y_axis": "I/O大小/计数", "unit": "bytes"},
-    "disk_io_sched": {"category": "disk", "chart_type": "bar", "x_axis": "指标", "y_axis": "I/O调度延迟", "unit": "us"},
-    # --- File 工具 ---
-    "read_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "读取次数", "unit": "次"},
-    "write_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "写入次数", "unit": "次"},
-    "file_open_stat": {"category": "file", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "打开文件次数", "unit": "次"},
-    "file_fsync_stat": {"category": "file", "chart_type": "bar", "x_axis": "指标", "y_axis": "fsync延迟", "unit": "us"},
-    # --- Memory 工具 ---
-    "mmap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "mmap次数", "unit": "次"},
-    "page_swap_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程PID", "y_axis": "交换时长", "unit": "us"},
-    "page_fault_stat": {"category": "memo", "chart_type": "pie", "x_axis": "进程_PID", "y_axis": "缺页中断次数", "unit": "次"},
-    "mem_oom_stat": {"category": "memo", "chart_type": "bar", "x_axis": "指标", "y_axis": "OOM次数", "unit": "次"},
-    # --- Network 工具 ---
-    "socket_stat": {"category": "network", "chart_type": "pie", "x_axis": "Socket类型/进程", "y_axis": "创建次数", "unit": "次"},
-    "tcp_connect": {"category": "network", "chart_type": "pie", "x_axis": "tcp进程", "y_axis": "创建次数", "unit": "次"},
-    "net_tcp_retransmit": {"category": "network", "chart_type": "bar", "x_axis": "PID/进程", "y_axis": "重传次数", "unit": "次"},
-    "net_udp_stat": {"category": "network", "chart_type": "bar", "x_axis": "PID", "y_axis": "UDP数据包/字节", "unit": "次/bytes"},
-}
-DEFAULT_CONFIG = {"category": "generic", "chart_type": "bar", "x_axis": "指标", "y_axis": "数值", "unit": ""}
+
+def load_tool_config():
+    try:
+        with CONFIG_PATH.open("r", encoding="utf-8") as config_file:
+            config = json.load(config_file)
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"无法加载工具配置 {CONFIG_PATH}: {error}") from error
+
+    if not isinstance(config, dict):
+        raise RuntimeError(f"工具配置必须是 JSON 对象: {CONFIG_PATH}")
+
+    tool_configs = config.get("tools", {})
+    default_config = config.get("default", {})
+    if not isinstance(tool_configs, dict) or not isinstance(default_config, dict):
+        raise RuntimeError(f"工具配置的 tools/default 必须是 JSON 对象: {CONFIG_PATH}")
+    return tool_configs, default_config
+
+
+TOOL_CONFIGS, DEFAULT_CONFIG = load_tool_config()
 
 app = FastAPI(title="my_tools Dashboard")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-jinja_env = Environment(loader=FileSystemLoader("templates"), autoescape=True)
+app.mount("/static", StaticFiles(directory=CLIENT_ROOT / "static"), name="static")
+jinja_env = Environment(
+    loader=FileSystemLoader(CLIENT_ROOT / "templates"), autoescape=True
+)
 
 registry = CollectorRegistry()
 tool_running = Gauge("my_tools_tool_running", "Running count", registry=registry)
 TOOL_STATS: Dict[str, Dict] = {}
 
+
 # --- 工具辅助函数 ---
 def get_available_tools():
-    if not TOOL_BIN_DIR.exists(): return []
+    if not TOOL_BIN_DIR.exists():
+        return []
     return sorted([t.name for t in TOOL_BIN_DIR.iterdir() if os.access(t, os.X_OK)])
+
 
 def parse_output_metrics(output: str) -> Dict[str, float]:
     out = {}
@@ -77,38 +77,54 @@ def parse_output_metrics(output: str) -> Dict[str, float]:
                 j = json.loads(ln)
                 if isinstance(j, dict):
                     for k, v in j.items():
-                        if isinstance(v, (int, float)): out[str(k)] = out.get(str(k), 0.0) + v
-            except: pass
+                        if isinstance(v, (int, float)):
+                            out[str(k)] = out.get(str(k), 0.0) + v
+            except:
+                pass
     return out
 
-def summarize_tool_metrics(tool_name: str, metrics: Dict[str, float], duration: float) -> Dict:
+
+def summarize_tool_metrics(
+    tool_name: str, metrics: Dict[str, float], duration: float
+) -> Dict:
     config = TOOL_CONFIGS.get(tool_name, DEFAULT_CONFIG)
     vals = list(metrics.values())
-    if not vals: return {}
+    if not vals:
+        return {}
     return {
         "tool_type": config["category"],
         "count": len(vals),
         "sum": sum(vals),
-        "avg": sum(vals)/len(vals) if vals else 0,
+        "avg": sum(vals) / len(vals) if vals else 0,
         "max": max(vals) if vals else 0,
-        "rate_per_sec": len(vals)/duration if duration > 0 else 0,
-        "top_keys": [{"key": k, "value": v} for k, v in sorted(metrics.items(), key=lambda x: x[1], reverse=True)[:5]]
+        "rate_per_sec": len(vals) / duration if duration > 0 else 0,
+        "top_keys": [
+            {"key": k, "value": v}
+            for k, v in sorted(metrics.items(), key=lambda x: x[1], reverse=True)[:5]
+        ],
     }
+
 
 # --- 路由 ---
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    tools = [{"name": t, "config": TOOL_CONFIGS.get(t, DEFAULT_CONFIG)} for t in get_available_tools()]
+    tools = [
+        {"name": t, "config": TOOL_CONFIGS.get(t, DEFAULT_CONFIG)}
+        for t in get_available_tools()
+    ]
     return jinja_env.get_template("index.html").render(request=request, tools=tools)
+
 
 @app.get("/api/tools")
 async def api_tools():
     return {"tools": [{"name": t} for t in get_available_tools()]}
 
+
 @app.get("/run/stream/{tool_name}")
 async def run_tool_stream(tool_name: str, duration: float = Query(10.0)):
     tool_path = TOOL_BIN_DIR / tool_name
-    if not tool_path.exists(): raise HTTPException(status_code=404)
+    if not tool_path.exists():
+        raise HTTPException(status_code=404)
 
     async def event_generator():
         # 资源锁与初始化
@@ -123,40 +139,47 @@ async def run_tool_stream(tool_name: str, duration: float = Query(10.0)):
 
         # 核心：异步执行子进程
         process = await asyncio.create_subprocess_exec(
-            "sudo", "-n", str(tool_path),
+            "sudo",
+            "-n",
+            str(tool_path),
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
+            stderr=asyncio.subprocess.STDOUT,
         )
 
         try:
             while True:
                 try:
-                    line_bytes = await asyncio.wait_for(process.stdout.readline(), timeout=0.1)
-                    if not line_bytes: break
-                    line = line_bytes.decode('utf-8', 'replace')
+                    line_bytes = await asyncio.wait_for(
+                        process.stdout.readline(), timeout=0.1
+                    )
+                    if not line_bytes:
+                        break
+                    line = line_bytes.decode("utf-8", "replace")
                     log_content.append(line)
                     yield {"data": json.dumps({"line": line})}
                 except asyncio.TimeoutError:
                     if asyncio.get_event_loop().time() - start_time > duration:
                         break
                     continue
-            
+
             if process.returncode is None:
                 process.terminate()
-            
+
             actual_duration = asyncio.get_event_loop().time() - start_time
             full_out = "".join(log_content)
             parsed = parse_output_metrics(full_out)
             summary = summarize_tool_metrics(tool_name, parsed, actual_duration)
 
             yield {
-                "data": json.dumps({
-                    "status": "success",
-                    "duration_seconds": round(actual_duration, 2),
-                    "config": TOOL_CONFIGS.get(tool_name, DEFAULT_CONFIG),
-                    "parsed_metrics": parsed,
-                    "parsed_summary": summary
-                })
+                "data": json.dumps(
+                    {
+                        "status": "success",
+                        "duration_seconds": round(actual_duration, 2),
+                        "config": TOOL_CONFIGS.get(tool_name, DEFAULT_CONFIG),
+                        "parsed_metrics": parsed,
+                        "parsed_summary": summary,
+                    }
+                )
             }
         except Exception as e:
             yield {"data": json.dumps({"status": "error", "error": str(e)})}
@@ -168,6 +191,23 @@ async def run_tool_stream(tool_name: str, duration: float = Query(10.0)):
 
     return EventSourceResponse(event_generator())
 
+
 if __name__ == "__main__":
+    import argparse
+
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    parser = argparse.ArgumentParser(description="Start the my_tools dashboard")
+    parser.add_argument("--host", default="0.0.0.0", help="Bind host")
+    parser.add_argument("--port", type=int, default=8000, help="Bind port")
+    parser.add_argument(
+        "--reload", action="store_true", help="Enable auto-reload for development"
+    )
+    args = parser.parse_args()
+
+    uvicorn.run(
+        "main:app" if args.reload else app,
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )

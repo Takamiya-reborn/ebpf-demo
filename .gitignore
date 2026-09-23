@@ -5,3 +5,10 @@
 !/my_tools/
 my_tools/bin/
 my_tools/.output
+
+# Python and uv
+.venv/
+__pycache__/
+*.py[cod]
+
+# run_log

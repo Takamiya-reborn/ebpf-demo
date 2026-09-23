@@ -21,10 +21,43 @@
 ## 目录与关键文件
 
 - `main.py`：应用入口，包含 API 定义、工具执行逻辑、Prometheus 指标和内存统计缓存。
+- `config/tool_configs.json`：工具分类、图表类型、坐标轴名称和单位等展示配置，修改后重启客户端生效。
 - `pyproject.toml`：Python 包和依赖配置。
 - `templates/index.html`：前端页面模板。
 - `static/`：前端样式和 JS 脚本。
 - `../my_tools/bin/`：可执行工具目录，客户端从这里动态发现可用工具。
+
+### 工具配置
+
+`main.py` 会按自身所在目录加载 `config/tool_configs.json`，不依赖启动命令的当前工作目录。配置文件包含两个对象：
+
+- `tools`：按工具名配置 `category`、`chart_type`、`x_axis`、`y_axis` 和 `unit`；
+- `default`：未单独配置的工具使用的默认展示配置。
+
+例如新增一个工具展示配置：
+
+```json
+{
+  "tools": {
+    "example_tool": {
+      "category": "cpu",
+      "chart_type": "bar",
+      "x_axis": "PID",
+      "y_axis": "延迟",
+      "unit": "us"
+    }
+  },
+  "default": {
+    "category": "generic",
+    "chart_type": "bar",
+    "x_axis": "指标",
+    "y_axis": "数值",
+    "unit": ""
+  }
+}
+```
+
+JSON 文件缺失、格式错误或 `tools`/`default` 不是对象时，客户端会在启动阶段直接报告错误。
 
 ## 核心架构
 
