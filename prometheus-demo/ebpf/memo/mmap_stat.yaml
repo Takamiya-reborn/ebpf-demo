@@ -1,10 +1,8 @@
 name: mmap_stat
-compiled_code: /examples/memo/mmap_stat.bpf.o
 metrics:
   counters:
     - name: memo_counter
       help: "Total number of sys_enter_mmap events per PID"
-      table: memo_counter
       labels:
         - name: pid
           size: 4

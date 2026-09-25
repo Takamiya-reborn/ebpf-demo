@@ -8,6 +8,9 @@ const UI = {
     summary: document.getElementById('tool-summary'),
     duration: document.getElementById('duration-input')
 };
+document.getElementById('clear-output-btn').addEventListener('click', () => {
+    UI.output.textContent = '';
+});
 function cleanupConnection() {
     if (currentEs) {
         currentEs.close();
@@ -30,10 +33,9 @@ function isSecondaryCountKey(key, config) {
 function buildChartData(parsedData, config = {}) {
     const labels = [];
     const values = [];
-    Object.entries(parsedData).forEach(([label, value]) => {
+    Object.entries(parsedData ?? {}).forEach(([label, value]) => {
         // ⭐ 过滤掉量级差距过大的计数指标
         if (isSecondaryCountKey(label, config)) {
-            console.log(`已从图表中剔除高量级计数指标: ${label}`);
             return;
         }
         labels.push(label);
@@ -76,7 +78,12 @@ function updateChart(parsedData, config = {}) {
 }
 
 function renderSummaryTable(summary) {
-    if (!summary || Object.keys(summary).length === 0) return `<div class="empty-state">无摘要数据</div>`;
+    if (!summary || Object.keys(summary).length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = '无摘要数据';
+        return empty;
+    }
 
     const rows = [
         ['工具类型', summary.tool_type],
@@ -84,29 +91,45 @@ function renderSummaryTable(summary) {
         ['数值总和', summary.sum?.toFixed(2)],
         ['平均值', summary.avg?.toFixed(2)]
     ];
-    let html = `<table class="summary-table"><tbody>`;
-    rows.forEach(([l, v]) => html += `<tr><td>${l}</td><td>${v}</td></tr>`);
-    html += `</tbody></table>`;
+    const fragment = document.createDocumentFragment();
+    const table = document.createElement('table');
+    table.className = 'summary-table';
+    const body = table.appendChild(document.createElement('tbody'));
+    rows.forEach(([label, value]) => {
+        const row = body.insertRow();
+        row.insertCell().textContent = label;
+        row.insertCell().textContent = value ?? '';
+    });
+    fragment.appendChild(table);
 
     if (summary.top_keys) {
-        html += `<div class="detail-title">Top 5 数据点</div><table class="summary-table">`;
+        const title = document.createElement('div');
+        title.className = 'detail-title';
+        title.textContent = 'Top 5 数据点';
+        fragment.appendChild(title);
+        const details = document.createElement('table');
+        details.className = 'summary-table';
+        const detailsBody = details.appendChild(document.createElement('tbody'));
         summary.top_keys.forEach(item => {
-            html += `<tr><td>${item.key}</td><td>${item.value}</td></tr>`;
+            const row = detailsBody.insertRow();
+            row.insertCell().textContent = item.key ?? '';
+            row.insertCell().textContent = item.value ?? '';
         });
-        html += `</table>`;
+        fragment.appendChild(details);
     }
-    return html;
+    return fragment;
 }
 UI.runBtn.addEventListener('click', () => {
     const tool = UI.toolSelect.value;
-    const duration = UI.duration.value;
     if (!tool) return;
+    // 与后端 Query(gt=0, le=300) 约束保持一致，避免 422
+    const duration = Math.min(Math.max(parseFloat(UI.duration.value) || 10, 1), 300);
     cleanupConnection();
     UI.runBtn.disabled = true;
     UI.status.textContent = "RUNNING";
     UI.status.className = "status-badge running";
     UI.output.textContent = `[${new Date().toLocaleTimeString()}] 正在启动 ${tool}...\n`;
-    currentEs = new EventSource(`/run/stream/${tool}?duration=${duration}`);
+    currentEs = new EventSource(`/run/stream/${encodeURIComponent(tool)}?duration=${duration}`);
     currentEs.onmessage = (ev) => {
         const data = JSON.parse(ev.data);
         if (data.line) {
@@ -116,8 +139,13 @@ UI.runBtn.addEventListener('click', () => {
         if (data.status) {
             UI.status.textContent = data.status.toUpperCase();
             UI.status.className = `status-badge ${data.status === 'success' ? 'success' : 'idle'}`;
-            updateChart(data.parsed_metrics, data.config);
-            UI.summary.innerHTML = renderSummaryTable(data.parsed_summary);
+            if (data.status === 'success') {
+                updateChart(data.parsed_metrics, data.config);
+                UI.summary.replaceChildren(renderSummaryTable(data.parsed_summary));
+            } else if (data.error) {
+                UI.output.textContent += `[错误] ${data.error}\n`;
+                UI.output.scrollTop = UI.output.scrollHeight;
+            }
             cleanupConnection();
         }
     };
@@ -132,7 +160,7 @@ UI.runBtn.addEventListener('click', () => {
     try {
         const r = await fetch('/api/tools');
         const data = await r.json();
-        UI.toolSelect.innerHTML = data.tools.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+        UI.toolSelect.replaceChildren(...data.tools.map(t => new Option(t.name, t.name)));
     } catch (e) {
         UI.status.textContent = "OFFLINE";
     }

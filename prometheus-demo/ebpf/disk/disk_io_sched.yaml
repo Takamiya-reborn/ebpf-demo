@@ -1,10 +1,8 @@
 name: disk_io_sched
-compiled_code: /examples/disk/disk_io_sched.bpf.o
 metrics:
   counters:
     - name: io_latency_stats
       help: "Block I/O completion latency stats. Index: 0=total_delay(ns), 1=count, 2=max_delay"
-      table: io_latency_stats
       labels:
         - name: op_index
           size: 4
@@ -12,7 +10,6 @@ metrics:
             - name: uint32
     - name: pid_io_latency
       help: "Per-PID cumulative I/O completion latency (ns)"
-      table: pid_io_latency
       labels:
         - name: pid
           size: 4

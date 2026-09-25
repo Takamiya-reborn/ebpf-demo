@@ -78,7 +78,8 @@ int main(int argc, char **argv)
 	skel = socket_stat_bpf_linked__open_and_load();
 	if (!skel)
 		return 1;
-	if (socket_stat_bpf_linked__attach(skel))
+	int err = socket_stat_bpf_linked__attach(skel);
+	if (err)
 		goto cleanup;
 
 	while (!exiting) {
@@ -87,5 +88,5 @@ int main(int argc, char **argv)
 	}
 cleanup:
 	socket_stat_bpf_linked__destroy(skel);
-	return 0;
+	return err;
 }

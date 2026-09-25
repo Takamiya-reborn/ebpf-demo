@@ -14,7 +14,9 @@ struct entry {
 
 int compare_entries(const void *a, const void *b)
 {
-	return ((struct entry *)b)->count - ((struct entry *)a)->count;
+	const struct entry *left = a;
+	const struct entry *right = b;
+	return left->count < right->count ? 1 : left->count > right->count ? -1 : 0;
 }
 
 struct my_irq_info {
@@ -33,13 +35,16 @@ int main(int argc, char **argv)
 	int err;
 
 	signal(SIGINT, sig_handler);
+	signal(SIGTERM, sig_handler);
 	skel = irq_stat_bpf_linked__open_and_load();
 	if (!skel)
 		return 1;
 
 	err = irq_stat_bpf_linked__attach(skel);
-	if (err)
+	if (err) {
+		fprintf(stderr, "Failed to attach BPF program: %d\n", err);
 		goto cleanup;
+	}
 
 	while (!exiting) {
 		sleep(1);
@@ -82,5 +87,5 @@ int main(int argc, char **argv)
 
 cleanup:
 	irq_stat_bpf_linked__destroy(skel);
-	return 0;
+	return err;
 }

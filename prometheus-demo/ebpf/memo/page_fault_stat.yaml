@@ -1,10 +1,8 @@
 name: page_fault_stat
-compiled_code: /examples/memo/page_fault_stat.bpf.o
 metrics:
   counters:
     - name: counter_exporter
       help: "Total number of page faults per process"
-      table: counter_expoter
       labels:
         - name: comm
           size: 16

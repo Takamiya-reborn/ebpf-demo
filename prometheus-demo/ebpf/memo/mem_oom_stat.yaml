@@ -1,10 +1,8 @@
 name: mem_oom_stat
-compiled_code: /examples/memo/mem_oom_stat.bpf.o
 metrics:
   counters:
     - name: oom_stats
       help: "Global OOM kill event counter"
-      table: oom_stats
       labels:
         - name: idx
           size: 4
@@ -12,10 +10,8 @@ metrics:
             - name: uint32
     - name: oom_victim_map
       help: "Per-PID OOM victim count"
-      table: oom_victim_map
       labels:
         - name: pid
           size: 4
           decoders:
             - name: uint32
-      value: count

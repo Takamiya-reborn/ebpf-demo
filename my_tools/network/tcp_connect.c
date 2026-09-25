@@ -58,5 +58,5 @@ int main(int argc, char **argv)
 
 cleanup:
 	tcp_connect_bpf_linked__destroy(skel);
-	return 0;
+	return err;
 }

@@ -81,6 +81,12 @@ int handle_udp_sendmsg(struct pt_regs *ctx)
 SEC("kretprobe/udp_recvmsg")
 int handle_udp_recvmsg(struct pt_regs *ctx)
 {
+    // Track recv size from return value
+    int ret = (int)PT_REGS_RC(ctx);
+    // 仅统计成功的接收；recvmsg 返回负值（失败）时不计入次数
+    if (ret <= 0)
+        return 0;
+
     __u32 pid = bpf_get_current_pid_tgid() >> 32;
 
     // Per-PID recv count
@@ -101,15 +107,11 @@ int handle_udp_recvmsg(struct pt_regs *ctx)
         bpf_map_update_elem(&udp_stats, &key_recv_cnt, &one, BPF_ANY);
     }
 
-    // Track recv size from return value
-    int ret = (int)PT_REGS_RC(ctx);
-    if (ret > 0) {
-        __u32 key_recv_bytes = 3;
-        __u64 bytes = (__u64)ret;
-        val = bpf_map_lookup_elem(&udp_stats, &key_recv_bytes);
-        if (val) __sync_fetch_and_add(val, bytes);
-        else bpf_map_update_elem(&udp_stats, &key_recv_bytes, &bytes, BPF_ANY);
-    }
+    __u32 key_recv_bytes = 3;
+    __u64 bytes = (__u64)ret;
+    val = bpf_map_lookup_elem(&udp_stats, &key_recv_bytes);
+    if (val) __sync_fetch_and_add(val, bytes);
+    else bpf_map_update_elem(&udp_stats, &key_recv_bytes, &bytes, BPF_ANY);
 
     return 0;
 }

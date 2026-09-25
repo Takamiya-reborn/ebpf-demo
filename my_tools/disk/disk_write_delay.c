@@ -21,21 +21,29 @@ static void print_incremental_stats(struct disk_write_delay_bpf_linked *skel)
 	__u64 curr_total_write = 0, curr_count_write = 0;
 	__u64 curr_total_flush = 0, curr_count_flush = 0;
 
-	// 从 Map 中读取当前累加值
-	bpf_map__lookup_elem(skel->maps.disk_write_stats, &total_write_key, sizeof(__u32), &curr_total_write,
-			     sizeof(__u64), 0);
-	bpf_map__lookup_elem(skel->maps.disk_write_stats, &count_write_key, sizeof(__u32), &curr_count_write,
-			     sizeof(__u64), 0);
-	bpf_map__lookup_elem(skel->maps.disk_write_stats, &total_flush_key, sizeof(__u32), &curr_total_flush,
-			     sizeof(__u64), 0);
-	bpf_map__lookup_elem(skel->maps.disk_write_stats, &count_flush_key, sizeof(__u32), &curr_count_flush,
-			     sizeof(__u64), 0);
+	// 从 Map 中读取当前累加值（失败时保持 0，增量按 0 处理）
+	if (bpf_map__lookup_elem(skel->maps.disk_write_stats, &total_write_key, sizeof(__u32),
+				 &curr_total_write, sizeof(__u64), 0))
+		fprintf(stderr, "failed to lookup stats key %u\n", total_write_key);
+	if (bpf_map__lookup_elem(skel->maps.disk_write_stats, &count_write_key, sizeof(__u32),
+				 &curr_count_write, sizeof(__u64), 0))
+		fprintf(stderr, "failed to lookup stats key %u\n", count_write_key);
+	if (bpf_map__lookup_elem(skel->maps.disk_write_stats, &total_flush_key, sizeof(__u32),
+				 &curr_total_flush, sizeof(__u64), 0))
+		fprintf(stderr, "failed to lookup stats key %u\n", total_flush_key);
+	if (bpf_map__lookup_elem(skel->maps.disk_write_stats, &count_flush_key, sizeof(__u32),
+				 &curr_count_flush, sizeof(__u64), 0))
+		fprintf(stderr, "failed to lookup stats key %u\n", count_flush_key);
 
-	// 计算这一秒内的增量
-	__u64 diff_write_ns = curr_total_write - prev_stats.total_write;
-	__u64 diff_write_cnt = curr_count_write - prev_stats.count_write;
-	__u64 diff_flush_ns = curr_total_flush - prev_stats.total_flush;
-	__u64 diff_flush_cnt = curr_count_flush - prev_stats.count_flush;
+	// 计算这一秒内的增量（累计值单调递增；读取失败或回退时按 0 处理，避免无符号下溢）
+	__u64 diff_write_ns = curr_total_write > prev_stats.total_write ?
+				      curr_total_write - prev_stats.total_write : 0;
+	__u64 diff_write_cnt = curr_count_write > prev_stats.count_write ?
+				       curr_count_write - prev_stats.count_write : 0;
+	__u64 diff_flush_ns = curr_total_flush > prev_stats.total_flush ?
+				      curr_total_flush - prev_stats.total_flush : 0;
+	__u64 diff_flush_cnt = curr_count_flush > prev_stats.count_flush ?
+				       curr_count_flush - prev_stats.count_flush : 0;
 
 	// 转换为毫秒 (double)
 	double write_us = diff_write_ns / 1000.0;
@@ -65,6 +73,7 @@ int main(int argc, char **argv)
 {
 	struct disk_write_delay_bpf_linked *skel;
 	signal(SIGINT, sig_handler);
+	signal(SIGTERM, sig_handler);
 
 	skel = disk_write_delay_bpf_linked__open_and_load();
 	if (!skel) {
@@ -81,6 +90,12 @@ int main(int argc, char **argv)
 		skel->progs.handle_blk_mq_start_request, false, "blk_mq_start_request");
 	skel->links.handle_blk_update_request = bpf_program__attach_kprobe(
 		skel->progs.handle_blk_update_request, false, "blk_update_request");
+	if (!skel->links.handle_vfs_write || !skel->links.handle_vfs_write_ret ||
+	    !skel->links.handle_blk_mq_start_request || !skel->links.handle_blk_update_request) {
+		fprintf(stderr, "Failed to attach one or more kprobes\n");
+		disk_write_delay_bpf_linked__destroy(skel);
+		return 1;
+	}
 
 	fprintf(stderr, "Monitoring disk latencies (ms)... Press Ctrl+C to stop.\n");
 

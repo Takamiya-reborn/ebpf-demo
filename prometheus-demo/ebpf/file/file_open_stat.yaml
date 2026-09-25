@@ -1,10 +1,8 @@
 name: file_open_stat
-compiled_code: /examples/file/file_open_stat.bpf.o
 metrics:
   counters:
     - name: open_counter
       help: "Total number of openat() calls per PID"
-      table: open_counter
       labels:
         - name: pid
           size: 4
@@ -12,7 +10,6 @@ metrics:
             - name: uint32
     - name: open_fail_counter
       help: "Total number of failed openat() calls per PID"
-      table: open_fail_counter
       labels:
         - name: pid
           size: 4
@@ -20,7 +17,6 @@ metrics:
             - name: uint32
     - name: open_comm_counter
       help: "Total number of openat() calls per process name"
-      table: open_comm_counter
       labels:
         - name: comm
           size: 16

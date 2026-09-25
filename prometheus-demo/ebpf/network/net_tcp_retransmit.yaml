@@ -1,10 +1,8 @@
 name: net_tcp_retransmit
-compiled_code: /examples/network/net_tcp_retransmit.bpf.o
 metrics:
   counters:
     - name: retrans_stats
       help: "Global TCP retransmission counter"
-      table: retrans_stats
       labels:
         - name: idx
           size: 4
@@ -12,7 +10,6 @@ metrics:
             - name: uint32
     - name: retrans_comm_map
       help: "TCP retransmission count per process name"
-      table: retrans_comm_map
       labels:
         - name: comm
           size: 16
@@ -20,10 +17,8 @@ metrics:
             - name: string
     - name: retrans_map
       help: "TCP retransmission count per PID with comm"
-      table: retrans_map
       labels:
         - name: pid
           size: 4
           decoders:
             - name: uint32
-      value: count

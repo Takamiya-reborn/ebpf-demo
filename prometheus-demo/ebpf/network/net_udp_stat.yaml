@@ -1,10 +1,8 @@
 name: net_udp_stat
-compiled_code: /examples/network/net_udp_stat.bpf.o
 metrics:
   counters:
     - name: udp_stats
       help: "UDP global stats. Index: 0=send_count, 1=recv_count, 2=send_bytes, 3=recv_bytes"
-      table: udp_stats
       labels:
         - name: idx
           size: 4
@@ -12,7 +10,6 @@ metrics:
             - name: uint32
     - name: udp_send_map
       help: "Per-PID UDP send packet count"
-      table: udp_send_map
       labels:
         - name: pid
           size: 4
@@ -20,7 +17,6 @@ metrics:
             - name: uint32
     - name: udp_recv_map
       help: "Per-PID UDP receive packet count"
-      table: udp_recv_map
       labels:
         - name: pid
           size: 4
@@ -28,7 +24,6 @@ metrics:
             - name: uint32
     - name: udp_send_bytes_map
       help: "Per-PID UDP send bytes"
-      table: udp_send_bytes_map
       labels:
         - name: pid
           size: 4

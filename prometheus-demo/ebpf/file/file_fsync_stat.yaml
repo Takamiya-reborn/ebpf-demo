@@ -1,10 +1,8 @@
 name: file_fsync_stat
-compiled_code: /examples/file/file_fsync_stat.bpf.o
 metrics:
   counters:
     - name: fsync_stats
       help: "fsync latency stats. Index: 0=total_latency(ns), 1=count"
-      table: fsync_stats
       labels:
         - name: op_index
           size: 4
@@ -12,7 +10,6 @@ metrics:
             - name: uint32
     - name: pid_fsync_latency
       help: "Per-PID cumulative fsync latency (ns)"
-      table: pid_fsync_latency
       labels:
         - name: pid
           size: 4

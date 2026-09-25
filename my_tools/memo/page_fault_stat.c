@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <string.h>
+#include <signal.h>
 #include "libbpf.h"
 #include "bpf.h"
 #include "page_fault_stat.skel.h"
@@ -10,6 +11,12 @@ struct val_t {
 	char comm[16];
 	uint64_t count;
 };
+
+static volatile bool exiting = false;
+static void sig_handler(int sig)
+{
+	exiting = true;
+}
 
 int main(int argc, char **argv)
 {
@@ -26,7 +33,9 @@ int main(int argc, char **argv)
 
 	map_fd = bpf_map__fd(skel->maps.counter);
 
-	while (1) {
+	signal(SIGINT, sig_handler);
+	signal(SIGTERM, sig_handler);
+	while (!exiting) {
 		uint32_t key, next_key;
 		struct val_t val;
 		int res;
@@ -43,7 +52,8 @@ int main(int argc, char **argv)
 				bpf_map_delete_elem(map_fd, &key);
 			}
 			res = next_res;
-			key = next_key;
+			if (res == 0)
+				key = next_key;
 		}
 		fflush(stdout);
 		sleep(1);

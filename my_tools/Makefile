@@ -16,8 +16,8 @@ BIN_DIR ?= bin
 _DUMMY := $(shell mkdir -p $(OUTPUT) $(BIN_DIR))
 
 INCLUDES := -I$(LIBBPF_DIR) -I$(LIBBPF_DIR)/src -I$(LIBBPF_DIR)/include/uapi -I$(LIBBPF_DIR)/include -I./common -I$(OUTPUT)
-CFLAGS += -g -Wall $(INCLUDES)
-LDFLAGS += -L$(LIBBPF_DIR) -lbpf -lelf -lz -pthread
+CFLAGS += -g -O2 -Wall $(INCLUDES)
+LDFLAGS += -lelf -lz -pthread
 
 .DEFAULT_GOAL := all
 # 建议保留 skel.h，方便开发时跳转查看定义
@@ -62,7 +62,7 @@ $(OUTPUT)/%.o: %.c $(OUTPUT)/%.skel.h | $(OUTPUT)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(APPS): % : $(OUTPUT)/%.o $(LIBBPF_DIR)/staticobjs/libbpf.a
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $(BIN_DIR)/$@
+	$(CC) $(CFLAGS) $< $(LIBBPF_DIR)/staticobjs/libbpf.a $(LDFLAGS) -o $(BIN_DIR)/$@
 
 clean:
 	rm -rf $(OUTPUT) $(BIN_DIR)

@@ -3,7 +3,6 @@ metrics:
   counters:
     - name: family_exporter
       help: "Socket calls by address family"
-      table: family_exporter
       labels:
         - name: family
           size: 4
@@ -12,7 +11,6 @@ metrics:
             
     - name: socket_pid_exporter
       help: "Socket calls by process name"
-      table: socket_pid_exporter
       labels:
         - name: comm
           size: 16

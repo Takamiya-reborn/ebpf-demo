@@ -109,6 +109,6 @@ sudo ./my_tools/bin/disk_read_delay > /tmp/disk_read_delay.log 2>&1
 
 ## 相关文档
 
- - [上游 libbpf-bootstrap 示例说明](README-upstream.md)
+- [上游 libbpf-bootstrap 示例说明](README-upstream.md)
 - [Web 客户端说明](client/README.md)
 - [Prometheus Demo 说明](prometheus-demo/README.md)
