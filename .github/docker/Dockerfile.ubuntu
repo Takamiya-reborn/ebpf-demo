@@ -10,15 +10,15 @@ ENV SHORTNAME=$SHORTNAME
 RUN apt-get update && apt-get install -y curl gnupg
 RUN if [ "${LLVM_VERSION}" = "21" ]; \
     then \
-        echo "\n\
-deb http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME} main\n\
-deb-src http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME} main\n\
-"  >> /etc/apt/sources.list;\
+    echo "\n\
+    deb http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME} main\n\
+    deb-src http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME} main\n\
+    "  >> /etc/apt/sources.list;\
     else \
-        echo "\n\
-deb http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME}-${LLVM_VERSION} main\n\
-deb-src http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME}-${LLVM_VERSION} main\n\
-"  >> /etc/apt/sources.list; \
+    echo "\n\
+    deb http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME}-${LLVM_VERSION} main\n\
+    deb-src http://apt.llvm.org/${SHORTNAME}/ llvm-toolchain-${SHORTNAME}-${LLVM_VERSION} main\n\
+    "  >> /etc/apt/sources.list; \
     fi
 RUN curl -L https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 
@@ -26,20 +26,20 @@ ARG DEBIAN_FRONTEND="noninteractive"
 ENV TZ="Etc/UTC"
 
 RUN apt-get update && apt-get install -y \
-      libelf-dev \
-      zlib1g-dev \
-      libbfd-dev \
-      clang-${LLVM_VERSION} \
-      libclang-${LLVM_VERSION}-dev \
-      libclang-common-${LLVM_VERSION}-dev \
-      libclang1-${LLVM_VERSION} \
-      llvm-${LLVM_VERSION} \
-      llvm-${LLVM_VERSION}-dev \
-      llvm-${LLVM_VERSION}-runtime \
-      libllvm${LLVM_VERSION} \
-      make cmake pkg-config \
-      sudo \
-      && apt-get -y clean
+    libelf-dev \
+    zlib1g-dev \
+    libbfd-dev \
+    clang-${LLVM_VERSION} \
+    libclang-${LLVM_VERSION}-dev \
+    libclang-common-${LLVM_VERSION}-dev \
+    libclang1-${LLVM_VERSION} \
+    llvm-${LLVM_VERSION} \
+    llvm-${LLVM_VERSION}-dev \
+    llvm-${LLVM_VERSION}-runtime \
+    libllvm${LLVM_VERSION} \
+    build-essential bpftool make cmake pkg-config \
+    sudo \
+    && apt-get -y clean
 
 # Install Rust via rustup to get a recent version (required for blazesym dependencies)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --component rustfmt

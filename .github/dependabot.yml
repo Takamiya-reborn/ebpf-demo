@@ -9,4 +9,4 @@ updates:
     allow:
       - dependency-name: libbpf-rs
     schedule:
-      interval: daily
+      interval: monthly
