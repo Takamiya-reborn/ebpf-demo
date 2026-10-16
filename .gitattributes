@@ -1,2 +1,3 @@
 # libbpf-bootstrap 上游自带的示例代码（C/Rust demo），非本人编写，不计入语言统计
 examples/** linguist-vendored
+my_tools/common/vmlinux.h linguist-generated
